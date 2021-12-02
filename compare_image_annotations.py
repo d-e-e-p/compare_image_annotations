@@ -10,7 +10,7 @@ import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import argparse
 
-from exitstatus import ExitStatus
+sys.tracebacklimit = None
 
 from lib.Bbox import Bbox 
 from lib.Bbox import BboxList
@@ -46,20 +46,21 @@ def validate_args(args: argparse.Namespace):
 
 
 
-def main() -> ExitStatus:
+def main(): 
     args = parse_args()
     if args.verbose:
         print(args)
 
     validate_args(args)
     b = BboxList(args.xml, args.tag, args.verbose)
+
     print(b)
 
     # opt.execute(args, operations,  solvers)
     # xml.read_data()
     # 
 
-    return ExitStatus.success
+    return 0
 
 
 if __name__ == "__main__":
