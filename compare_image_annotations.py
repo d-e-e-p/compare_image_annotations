@@ -9,11 +9,14 @@
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import argparse
+import logging
 
 sys.tracebacklimit = None
 
-from lib.Bbox import Bbox 
-from lib.Bbox import BboxList
+from lib.Bbox    import Bbox 
+from lib.Bbox    import BboxList
+from lib.Parser  import Parser
+from lib.Plotter import Plotter
 
 __author__      = 'deep@tensorfield.ag'
 __copyright__   = 'Copyright (C) 2021 - Tensorfield Ag '
@@ -36,25 +39,41 @@ def parse_args() -> argparse.Namespace:
     return args
 
 def validate_args(args: argparse.Namespace):
+
+    err = 0
     if not os.path.isdir(args.img):
-        raise Exception(f'img dir {args.img} does not exist')
+        logging.error(f' img dir {args.img} does not exist')
+        err = 1
     if not os.path.isdir(args.out):
-        raise Exception(f'out dir {args.out} does not exist')
+        logging.error(f' out dir {args.out} does not exist')
+        err = 1
     for xml in args.xml:
         if not os.path.isdir(xml):
-            raise Exception(f'xml dir {xml} does not exist')
+            logging.error(f' xml dir {xml} does not exist')
+            err = 1
 
+    return err
 
 
 def main(): 
     args = parse_args()
     if args.verbose:
-        print(args)
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
 
-    validate_args(args)
-    b = BboxList(args.xml, args.tag, args.verbose)
+    logging.debug(args)
+    err = validate_args(args)
+    if err:
+        return err
 
-    print(b)
+    bbl = BboxList()
+    Parser(bbl, args.xml)
+    logging.info(bbl)
+    bbl.associate_stem_with_outer()
+    bbl.compute_iou_for_each_annotation()
+    Plotter(bbl, args.img, args.out)
+
 
     # opt.execute(args, operations,  solvers)
     # xml.read_data()

@@ -8,6 +8,7 @@ import time
 from collections import defaultdict
 from glob import glob
 import pudb
+import logging
 
 # from https://stackoverflow.com/questions/2600790/multiple-levels-of-collection-defaultdict-in-python
 class DeepDict(defaultdict):
@@ -28,21 +29,13 @@ class Bbox:
 
 
 class BboxList:
-    def __init__(self, xml_paths, tag, verbose, img_ext='.jpg', xml_ext='.xml') :
-
-        self.tag = tag
-        self.verbose = verbose
-        self.img_ext = img_ext
-        self.xml_ext = xml_ext
+    def __init__(self):
         self.bbox_obj_list = []
         self.golden_dir = defaultdict(defaultdict)
-        
-        self.parse_xml_dirs(xml_paths)
-        self.compute_centers()
-        self.compute_iou()
+        #self.compute_centers()
+        #self.compute_iou()
 
     # TODO: combine filter functions 
-
     # search objects with NOT matching parameters
     def rfilter(self, bbox_obj_list,  **kwargs):
         items = []
@@ -59,92 +52,24 @@ class BboxList:
                 items.append(item)
         return items
 
-
-
-    # TODO: replace with logger
-    def vprint(self, string):
-        if self.verbose:
-            print(string)
-    
-    def parse_xml_dirs(self, xml_path):
+    def get_image_list(self):
         """
-        get the list of bboxes
+        return list of images in all annotations
         """
-        for path in xml_path:
-            for xml in glob(os.path.join(path, '*' + self.xml_ext)):
-                self.vprint(f"-> parsing xml file: {xml}")
-                self.bbox_obj_list.extend(self.parse_xml_file(path, xml))
+        image_map = defaultdict(lambda: 0)
+        for obj in self.bbox_obj_list:
+            image_map[obj.image] += 1
+        logging.info(f" number of images = {image_map}")
+        return image_map.keys()
 
 
-
-    def parse_xml_file(self, dir, file):
-#   parse xml file that looks like:
-#
-#            <annotation>
-#        <folder>Review</folder>
-#        <filename>img0002901.jpg</filename>
-#        <path>C:\Users\CFGuest\Desktop\Review\img0002901.jpg</path>
-#        <source>
-#            <database>Unknown</database>
-#        </source>
-#        <size>
-#            <width>1456</width>
-#            <height>1088</height>
-#            <depth>3</depth>
-#        </size>
-#        <segmented>0</segmented>
-#        <object>
-#            <name>carrot_outer</name>
-#            <pose>Unspecified</pose>
-#            <truncated>0</truncated>
-#            <difficult>0</difficult>
-#            <bndbox>
-#                <xmin>650</xmin>
-#                <ymin>55</ymin>
-#                <xmax>847</xmax>
-#                <ymax>208</ymax>
-#            </bndbox>
-#        </object>
-
-        
-        tree = ET.parse(file)
-        root = tree.getroot()
-        bbox_list = []
-
-        folder   = root.find('folder').text
-        image    = root.find('filename').text.rsplit('.', 1)[0]
-        path     = root.find('path').text
-        img_size = root.find('size')
-        objects  = root.findall('object')
-        bboxes = defaultdict(lambda: defaultdict(list))
-        for obj in objects:
-            class_name = obj.find('name').text
-            class_name = class_name.replace(' ','_').lower()
-            difficult = int(obj.find('difficult').text)
-            bbox = obj.find('bndbox')
-            xmin = int(bbox.find('xmin').text)
-            ymin = int(bbox.find('ymin').text)
-            xmax = int(bbox.find('xmax').text)
-            ymax = int(bbox.find('ymax').text)
-
-            # carrot_outer -> carrot , outer
-            class_base, class_type = class_name.rsplit('_', 1)
-            if class_type == 'outer' or class_type == 'meristem':     
-                bbox = Bbox(dir, file, image,  class_base, class_type, difficult, [xmin, ymin, xmax, ymax])
-                bbox_list.append(bbox)
-
-            else:
-                print(f"ERROR: class name should end in _outer or _meristem: {class_name}")
-                print(f"ERROR: look at file: {file}")
-        return bbox_list
-
-    def compute_centers(self):
+    def associate_stem_with_outer(self):
         """
-        create new box elements with centers
+        each outer should have corresponding stem
         """
         for obj in self.bbox_obj_list:
             if obj.class_type == 'outer':
-                self.vprint(f"box is outer = {obj}")
+                logging.info(f"box is outer = {obj}")
                 inner_obj_list = self.filter(self.bbox_obj_list, 
                         dir        = obj.dir,
                         image      = obj.image, 
@@ -175,14 +100,14 @@ class BboxList:
                     min_obj  = obj
 
         if min_dist == math.inf:
-            self.vprint(f"WARNING: no meristem found for {obj_src.bbox}")
+            logging.info(f"WARNING: no meristem found for {obj_src.bbox}")
             min_obj = None
         else:
             min_dist = round(min_dist)
 
         obj_src.meristem = min_obj
 
-    def compute_iou(self):
+    def compute_iou_for_each_annotation(self):
         """
         compute the iou of each outer against all other annotations of that same class
         """
@@ -207,7 +132,7 @@ class BboxList:
                     if n > max_annotation[image][class_base]:
                         max_annotation[image][class_base] = n
                         self.golden_dir[image][class_base] = dir
-            self.vprint(f"golden dir = {self.golden_dir}")
+            logging.info(f"golden dir = {self.golden_dir}")
 
         # pass2: compute iou for each box relative to golden
         for obj_src in self.bbox_obj_list:
@@ -227,7 +152,7 @@ class BboxList:
         compute the intersection over union between obj_src and tgt_obj_list, returning the min value
         """
         iou_min = 0
-        self.vprint(f"box_src={obj_src.bbox} bbox_list={tgt_obj_list}")
+        logging.info(f"box_src={obj_src.bbox} bbox_list={tgt_obj_list}")
         for obj_tgt in tgt_obj_list:
             iou = self.compute_iou_bbox_pair(obj_src.bbox, obj_tgt.bbox)
             if iou < iou_min:
@@ -245,7 +170,7 @@ class BboxList:
         if not bbox_tgt:
             return 0
 
-        self.vprint(f"bbox_src={bbox_src} bbox_tgt={bbox_tgt}")
+        logging.info(f"bbox_src={bbox_src} bbox_tgt={bbox_tgt}")
 
         xmin_src, ymin_src, xmax_src, ymax_src = bbox_src
         xmin_tgt, ymin_tgt, xmax_tgt, ymax_tgt = bbox_tgt
