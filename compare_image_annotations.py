@@ -18,11 +18,14 @@ from lib.Bbox    import BboxList
 from lib.Parser  import Parser
 from lib.Plotter import Plotter
 
+from libs.labelImg import *
+
 __author__      = 'deep@tensorfield.ag'
 __copyright__   = 'Copyright (C) 2021 - Tensorfield Ag '
 __license__     = 'New BSD License - https://opensource.org/licenses/BSD-3-Clause'
 __maintainer__  = 'deep'
 __status__      = 'Development'
+__appnane__     = 'compare_image_annotations'
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,23 +66,22 @@ def main():
         logging.basicConfig(level=logging.INFO)
 
     logging.debug(args)
-    err = validate_args(args)
-    if err:
+    # return if validate fails to find dirs
+    if err := validate_args(args):
         return err
 
     bbl = BboxList()
     Parser(bbl, args.xml)
     logging.info(bbl)
+    bbl.update_stats()
     bbl.associate_stem_with_outer()
     bbl.compute_iou_for_each_annotation()
-    Plotter(bbl, args.img, args.out)
+    pl = Plotter(bbl, args.img, args.out)
+
+    app, _win = run_main_gui(bbl, pl, args.img, args.out)
+    return app.exec_()
 
 
-    # opt.execute(args, operations,  solvers)
-    # xml.read_data()
-    # 
-
-    return 0
 
 
 if __name__ == "__main__":

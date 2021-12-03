@@ -9,6 +9,7 @@ from collections import defaultdict
 from glob import glob
 import pudb
 import logging
+from random import randint
 
 # from https://stackoverflow.com/questions/2600790/multiple-levels-of-collection-defaultdict-in-python
 class DeepDict(defaultdict):
@@ -25,15 +26,25 @@ class Bbox:
         self.difficult  = difficult
         self.bbox = bbox
         self.meristem = None
-        self.iou = 'U'
+        self.iou = {}
+
+class Stats:
+    def __init__ (self):
+        self.image_list =  []
+        self.user_list  =  []
+        self.dir_list   =  []
+        self.user_to_dir_map    = defaultdict(str)
+        self.dir_to_user_map    = defaultdict(str)
+        self.image_to_class_map = defaultdict(list)
 
 
 class BboxList:
     def __init__(self):
         self.bbox_obj_list = []
         self.golden_dir = defaultdict(defaultdict)
-        #self.compute_centers()
-        #self.compute_iou()
+        # after every update to bbox_obj_list , stats needs to be regenerated
+        self.stats = Stats()
+
 
     # TODO: combine filter functions 
     # search objects with NOT matching parameters
@@ -52,6 +63,14 @@ class BboxList:
                 items.append(item)
         return items
 
+
+    def update_stats(self):
+        self.stats.image_list  = self.get_image_list()
+        self.stats.user_to_dir_map, self.stats.dir_to_user_map    = self.get_user_map()
+        self.stats.user_list   = self.stats.user_to_dir_map.keys()
+        self.stats.dir_list    = self.stats.dir_to_user_map.keys()
+        self.stats.image_to_class_map = self.get_image_to_class_map()
+
     def get_image_list(self):
         """
         return list of images in all annotations
@@ -62,6 +81,48 @@ class BboxList:
         logging.info(f" number of images = {image_map}")
         return image_map.keys()
 
+    def get_user_map(self):
+        """
+        return tail part of dir (if it's unique)
+        """
+        # first get list of dirs
+        dir = []
+        for obj in self.bbox_obj_list:
+            dir.append(obj.dir)
+        dir = sorted(set(dir))
+
+        user_to_dir_map = defaultdict(str)
+        dir_to_user_map = defaultdict(str)
+        for d in dir:
+            tail = os.path.basename(d)
+            while user_to_dir_map[tail]:
+                tail += f"_{randint(0,9)}"
+            user_to_dir_map[tail] = d
+            dir_to_user_map[d] = tail
+        return user_to_dir_map, dir_to_user_map
+
+    def get_best_ref_user(self, image, class_base):
+        logging.info(f" golden_sir = {self.golden_dir}")
+        best_dir = self.golden_dir[image][class_base]
+        logging.info(f" best_dir = {best_dir} for {image} {class_base}")
+        logging.info(f" map = {self.stats.dir_to_user_map}")
+        best_user = self.stats.dir_to_user_map[best_dir]
+        return best_user
+
+
+    def get_image_to_class_map(self):
+        """
+        active classs in each image
+        """
+        image_to_class_map = defaultdict(list)
+        for obj in self.bbox_obj_list:
+            image_to_class_map[obj.image].append(obj.class_base)
+
+        for image in image_to_class_map.keys():
+            image_to_class_map[image] = sorted(set(image_to_class_map[image]))
+
+        logging.info(f" image_to_class_map= {image_to_class_map}")
+        return image_to_class_map
 
     def associate_stem_with_outer(self):
         """
@@ -134,17 +195,22 @@ class BboxList:
                         self.golden_dir[image][class_base] = dir
             logging.info(f"golden dir = {self.golden_dir}")
 
-        # pass2: compute iou for each box relative to golden
+        # pass2: compute iou for each box relative to others
         for obj_src in self.bbox_obj_list:
-            gdir = self.golden_dir[obj_src.image][obj_src.class_base]
-            if obj_src.dir == gdir:
-                continue
-            tgt_obj_list = self.filter(self.bbox_obj_list, 
-                            dir        = gdir,
+
+            # not matching dir, but matching image/class
+            tgt_all_obj_list = self.filter(self.bbox_obj_list, 
                             image      = obj_src.image, 
                             class_base = obj_src.class_base,
                             class_type = obj_src.class_type)
-            obj_src.iou = self.compute_iou_obj_list(obj_src, tgt_obj_list)
+            for dir in self.stats.dir_list: 
+                if dir == obj_src.dir:
+                    continue
+                tgt_obj_list = self.filter(tgt_all_obj_list, dir = dir )
+                logging.info(f" checking dir filter for {dir} filter for list= {tgt_obj_list}")
+                user = self.stats.dir_to_user_map[dir]
+                obj_src.iou[user] = self.compute_iou_obj_list(obj_src, tgt_obj_list)
+            logging.info(f" iou for {obj_src} is {obj_src.iou}")
 
 
     def compute_iou_obj_list(self, obj_src, tgt_obj_list):
