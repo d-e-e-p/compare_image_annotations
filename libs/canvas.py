@@ -1,22 +1,16 @@
 
-try:
-    from PyQt5.QtGui import *
-    from PyQt5.QtCore import *
-    from PyQt5.QtWidgets import *
-except ImportError:
-    from PyQt4.QtGui import *
-    from PyQt4.QtCore import *
-
-# from PyQt4.QtOpenGL import *
-
 from libs.shape import Shape
 from libs.utils import distance
 
-CURSOR_DEFAULT = Qt.ArrowCursor
-CURSOR_POINT = Qt.PointingHandCursor
-CURSOR_DRAW = Qt.CrossCursor
-CURSOR_MOVE = Qt.ClosedHandCursor
-CURSOR_GRAB = Qt.OpenHandCursor
+from PyQt5.QtGui import QBrush, QColor, QCursor, QPainter, QPixmap
+from PyQt5.QtCore import QPoint, QPointF, Qt, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QMenu, QWidget
+
+CURSOR_DEFAULT = Qt.CursorShape.ArrowCursor
+CURSOR_POINT   = Qt.CursorShape.PointingHandCursor
+CURSOR_DRAW    = Qt.CursorShape.CrossCursor
+CURSOR_MOVE    = Qt.CursorShape.ClosedHandCursor
+CURSOR_GRAB    = Qt.CursorShape.OpenHandCursor
 
 # class Canvas(QGLWidget):
 

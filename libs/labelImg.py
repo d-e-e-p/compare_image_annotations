@@ -13,32 +13,33 @@ import webbrowser as wb
 import logging
 from pathlib import Path
 
+import pudb
+
 from functools import partial
 from collections import defaultdict
 
 from lib.Bbox    import Bbox
 from lib.Bbox    import BboxList
 from lib.Plotter import Plotter, DrawObject
+from lib.ColorschemeTableau import ColorSchemeTableau
 
-try:
-    from PyQt5.QtGui import *
-    from PyQt5.QtCore import *
-    from PyQt5.QtWidgets import *
-except ImportError:
-    # needed for py3+qt4
-    # Ref:
-    # http://pyqt.sourceforge.net/Docs/PyQt4/incompatible_apis.html
-    # http://stackoverflow.com/questions/21217399/pyqt4-qtcore-qvariant-object-instead-of-a-string
-    if sys.version_info.major >= 3:
-        import sip
-        sip.setapi('QVariant', 2)
-    from PyQt4.QtGui import *
-    from PyQt4.QtCore import *
+from PyQt5.QtGui import QColor, QCursor, QImage, QImageReader, QPixmap
+from PyQt5.QtCore import (QByteArray, QFileInfo, QPoint, QPointF, QProcess, QSize, QTimer, QVariant, Qt)
+from PyQt5.QtWidgets import (QAction, QApplication, QCheckBox, QDockWidget, QFileDialog,
+                             QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+                             QMainWindow, QMenu, QMessageBox, QRadioButton, QScrollArea,
+                             QToolButton, QVBoxLayout, QWidget, QWidgetAction, QComboBox)
 
 from libs.combobox import ComboBox
+from libs.constants import (FORMAT_CREATEML, FORMAT_PASCALVOC, FORMAT_YOLO, SETTING_ADVANCE_MODE,
+                            SETTING_AUTO_SAVE, SETTING_DRAW_SQUARE, SETTING_FILENAME,
+                            SETTING_FILL_COLOR, SETTING_LABEL_FILE_FORMAT, SETTING_LAST_OPEN_DIR,
+                            SETTING_LINE_COLOR, SETTING_PAINT_LABEL, SETTING_RECENT_FILES,
+                            SETTING_SAVE_DIR, SETTING_SINGLE_CLASS, SETTING_WIN_POSE,
+                            SETTING_WIN_SIZE, SETTING_WIN_STATE)
 from libs.resources import *
-from libs.constants import *
-from libs.utils import *
+from libs.utils import (Struct, add_actions, format_shortcut, generate_color_by_text, have_qstring,
+                        natural_sort, new_action, new_icon)
 from libs.settings import Settings
 from libs.shape import Shape, DEFAULT_LINE_COLOR, DEFAULT_FILL_COLOR
 from libs.stringBundle import StringBundle
@@ -83,6 +84,7 @@ class WindowMixin(object):
 class MainWindow(QMainWindow, WindowMixin):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = list(range(3))
 
+    # TODO: split up _init into pieces..
     def __init__(self, bbl, pl,  default_filename=None, default_save_dir=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
@@ -100,7 +102,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.pl  = pl
         self.ref_user = ""
         self.current_image = ""
-        self.current_draw_object = DrawObject("", "", "", False, False, [])
+        self.current_draw_object = DrawObject("", "", "", False, False, [], "")
 
         # Load string bundle for i18n
         self.string_bundle = StringBundle.get_bundle()
@@ -117,6 +119,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.last_open_dir = None
         self.cur_img_idx = 0
         self.img_count = len(self.m_img_list)
+        self.color_scheme = None
 
         # record image to path (assume unique names!)
         self.image_basename_to_path = defaultdict(str)
@@ -159,16 +162,21 @@ class MainWindow(QMainWindow, WindowMixin):
         self.edit_button = QToolButton()
         self.edit_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
 
-        self.class_base_button = QCheckBox("Class Base")
-        self.class_base_button.setChecked(True)
-        self.class_base_button.stateChanged.connect(self.draw_iou_boxes)
+        self.class_outer_button = QCheckBox("Plant Outer")
+        self.class_outer_button.setChecked(True)
+        self.class_outer_button.stateChanged.connect(self.draw_iou_boxes)
+        list_layout.addWidget(self.class_outer_button)
 
-        self.class_type_button = QCheckBox("Class Type")
-        self.class_type_button.setChecked(True)
-        self.class_type_button.stateChanged.connect(self.draw_iou_boxes)
+        self.class_inner_button = QCheckBox("Plant Inner")
+        self.class_inner_button.setChecked(True)
+        self.class_inner_button.stateChanged.connect(self.draw_iou_boxes)
+        list_layout.addWidget(self.class_inner_button)
 
-        list_layout.addWidget(self.class_base_button)
-        list_layout.addWidget(self.class_type_button)
+        self.class_inout_button = QCheckBox("Plant Stem-to-Outer")
+        self.class_inout_button.setChecked(False)
+        self.class_inout_button.stateChanged.connect(self.draw_iou_boxes)
+        list_layout.addWidget(self.class_inout_button)
+
         list_layout.addSpacing(50)
 
         self.user_button = {}
@@ -177,6 +185,20 @@ class MainWindow(QMainWindow, WindowMixin):
             self.user_button[user].setChecked(True)
             self.user_button[user].stateChanged.connect(self.draw_iou_boxes)
             list_layout.addWidget(self.user_button[user])
+
+
+        # color selection
+        list_layout.addSpacing(50)
+
+        self.colorLabel = QLabel("Color Scheme:")
+        self.colorLabel.setAlignment(Qt.AlignCenter)
+        list_layout.addWidget(self.colorLabel)
+
+        self.colorBox = QComboBox()
+        self.set_color_scheme_options(self.colorBox)
+        self.colorBox.currentIndexChanged.connect(self.color_scheme_changed)
+        self.colorBox.setCurrentIndex(0)
+        list_layout.addWidget(self.colorBox)
 
         # Add some of widgets to list_layout
         #list_layout.addWidget(self.edit_button)
@@ -198,29 +220,14 @@ class MainWindow(QMainWindow, WindowMixin):
         self.label_list.itemChanged.connect(self.label_item_changed)
         list_layout.addWidget(self.label_list)
 
-
-
         self.annotation_dock = QDockWidget("Annotations to Display", self)
         self.annotation_dock.setObjectName('xml')
         self.annotation_dock.setWidget(label_list_container)
 
-#.#        # Create and add a widget for showing current label items
-#.#        self.staff_display_list = QListWidget()
-#.#        staff_display_list_container = QWidget()
-#.#        staff_display_list_container.setLayout(list_layout)
-#.#        self.staff_display_list.itemActivated.connect(self.label_selection_changed)
-#.#        self.staff_display_list.itemSelectionChanged.connect(self.label_selection_changed)
-#.#        self.staff_display_list.itemDoubleClicked.connect(self.edit_label)
-#.#        # Connect to itemChanged to detect checkbox changes.
-#.#        self.staff_display_list.itemChanged.connect(self.label_item_changed)
-#.#        list_layout.addWidget(self.staff_display_list)
-#.#
-#.#
-#.#        self.dock_staff_display_list = QDockWidget("staff list", self)
-#.#        self.dock_staff_display_list.setObjectName("staff")
-#.#        self.dock_staff_display_list.setWidget(staff_display_list_container)
-#.#
-#.#        # file list
+
+
+
+           # file list
         self.file_list_widget = QListWidget()
         self.file_list_widget.itemDoubleClicked.connect(self.file_item_double_clicked)
         file_list_layout = QVBoxLayout()
@@ -283,6 +290,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.shapeMoved.connect(self.set_dirty)
         self.canvas.selectionChanged.connect(self.shape_selection_changed)
         self.canvas.drawingPolygon.connect(self.toggle_drawing_sensitive)
+
+
 
         # add docks to RHS
         self.setCentralWidget(scroll)
@@ -387,7 +396,7 @@ class MainWindow(QMainWindow, WindowMixin):
             u"Zoom in or out of the image. Also accessible with"
             " %s and %s from the canvas." % (format_shortcut("Ctrl+[-+]"),
                                              format_shortcut("Ctrl+Wheel")))
-        self.zoom_widget.setEnabled(False)
+        self.zoom_widget.setEnabled(True)
 
         zoom_in = action(get_str('zoomin'), partial(self.add_zoom, 10),
                          'Ctrl++', 'zoom-in', get_str('zoominDetail'), enabled=False)
@@ -507,8 +516,13 @@ class MainWindow(QMainWindow, WindowMixin):
             action('&Copy here', self.copy_shape),
             action('&Move here', self.move_shape)))
 
+        self.tools = self.toolbar('Tools')
         self.actions.beginner = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, verify, save, save_format, None, create, copy, delete, None,
+            zoom_in, zoom, zoom_out, fit_window, fit_width)
+
+        self.actions.beginner = (
+            open_next_image, open_prev_image, None, None,
             zoom_in, zoom, zoom_out, fit_window, fit_width)
 
         self.actions.advanced = (
@@ -656,6 +670,8 @@ class MainWindow(QMainWindow, WindowMixin):
             tool, menu = self.actions.beginner, self.actions.beginnerContext
         else:
             tool, menu = self.actions.advanced, self.actions.advancedContext
+        self.tools.clear()
+        add_actions(self.tools, tool)
         self.canvas.menus[0].clear()
         add_actions(self.canvas.menus[0], menu)
         self.menus.edit.clear()
@@ -664,10 +680,12 @@ class MainWindow(QMainWindow, WindowMixin):
         add_actions(self.menus.edit, actions + self.actions.editMenu)
 
     def set_beginner(self):
-        pass
+        self.tools.clear()
+        add_actions(self.tools, self.actions.beginner)
 
     def set_advanced(self):
-        pass
+        self.tools.clear()
+        add_actions(self.tools, self.actions.advanced)
 
     def set_dirty(self):
         self.dirty = True
@@ -1691,6 +1709,24 @@ class MainWindow(QMainWindow, WindowMixin):
             self.staff_buttons[self.ref_user].setChecked(True)
             logging.info(f"user = {self.ref_user} button status = {self.staff_buttons[self.ref_user].isChecked()}")
 
+    # trigger update on new color scheme
+    def color_scheme_changed(self):
+        # get color scheme from combo box
+        txt = self.colorBox.currentText()
+        if self.color_scheme != txt:
+            self.color_scheme = txt
+            self.draw_iou_boxes()
+
+
+    def set_color_scheme_options(self, widget):
+        c = ColorSchemeTableau()
+        scheme_list = c.get_color_schemes()
+        for scheme in scheme_list:
+            widget.addItem(scheme)
+        # set default initially to first item
+        self.color_scheme = widget.itemText(0)
+
+
     def btnstate(self, state):
         logging.info(f"state = {state}")
         
@@ -1722,14 +1758,15 @@ class MainWindow(QMainWindow, WindowMixin):
         for user in self.bbl.stats.user_list:
             visible_users[user] = self.user_button[user].isChecked()
 
-        visible_outer = self.class_base_button.isChecked()
-        visible_inner = self.class_type_button.isChecked()
+        visible_outer = self.class_outer_button.isChecked()
+        visible_inner = self.class_inner_button.isChecked()
+        visible_inout = self.class_inout_button.isChecked()
 
         if not visible_outer and not visible_inner:
             logging.info(f"draw: no boxes to draw")
             return
 
-        dobj = DrawObject(image, class_base, self.ref_user, visible_outer, visible_inner , visible_users)
+        dobj = DrawObject(image, class_base, self.ref_user, visible_outer, visible_inner , visible_users, self.color_scheme)
         if dobj != self.current_draw_object:
             self.current_draw_object = dobj
             logging.info(f"draw: new draw object {dobj}")

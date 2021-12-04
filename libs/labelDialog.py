@@ -1,10 +1,8 @@
-try:
-    from PyQt5.QtGui import *
-    from PyQt5.QtCore import *
-    from PyQt5.QtWidgets import *
-except ImportError:
-    from PyQt4.QtGui import *
-    from PyQt4.QtCore import *
+
+from PyQt5.QtGui import QCursor
+from PyQt5.QtCore import QPoint, QStringListModel, Qt
+from PyQt5.QtWidgets import (QCompleter, QDialog, QDialogButtonBox, QLineEdit, QListWidget,
+                             QVBoxLayout)
 
 from libs.utils import new_icon, label_validator, trimmed
 
@@ -29,9 +27,9 @@ class LabelDialog(QDialog):
 
         layout = QVBoxLayout()
         layout.addWidget(self.edit)
-        self.button_box = bb = BB(BB.Ok | BB.Cancel, Qt.Horizontal, self)
-        bb.button(BB.Ok).setIcon(new_icon('done'))
-        bb.button(BB.Cancel).setIcon(new_icon('undo'))
+        self.button_box = bb = BB(BB.StandardButton.Ok | BB.StandardButton.Cancel, Qt.Orientation.Horizontal, self)
+        bb.button(BB.StandardButton.Ok).setIcon(new_icon('done'))
+        bb.button(BB.StandardButton.Cancel).setIcon(new_icon('undo'))
         bb.accepted.connect(self.validate)
         bb.rejected.connect(self.reject)
         layout.addWidget(bb)

@@ -14,19 +14,20 @@ from random import choice, randint
 
 from lib.Bbox   import Bbox
 from lib.Bbox   import BboxList
-
+from lib.ColorschemeTableau import ColorSchemeTableau
 
 
 import pudb
 
 class DrawObject(object):
-    def __init__(self, image, class_base, ref_user, visible_outer, visible_inner , visible_users):
+    def __init__(self, image, class_base, ref_user, visible_outer, visible_inner , visible_users, color_scheme):
         self.image = image
         self.class_base = class_base
         self.ref_user = ref_user
         self.visible_outer = visible_outer
         self.visible_inner = visible_inner
         self.visible_users = visible_users
+        self.color_scheme  = color_scheme
 
     def __eq__(self, other): 
         if  self.image         == other.image and         \
@@ -34,10 +35,11 @@ class DrawObject(object):
             self.ref_user      == other.ref_user and      \
             self.visible_outer == other.visible_outer and \
             self.visible_inner == other.visible_inner and \
-            self.visible_users == other.visible_users :
+            self.visible_users == other.visible_users and \
+            self.color_scheme  == other.color_scheme:
             return True 
     def __str__(self):
-        return f"i={self.image} c={self.class_base} ru={self.ref_user} vo={self.visible_outer} vi={self.visible_inner} vu={self.visible_users}"
+        return f"i={self.image} c={self.class_base} ru={self.ref_user} vo={self.visible_outer} vi={self.visible_inner} vu={self.visible_users} cs={self.color_scheme}"
 
 class Plotter:
     def __init__(self, bbl, img_dir, out_dir):
@@ -45,6 +47,7 @@ class Plotter:
         self.bbl = bbl
         self.margin_x = 100
         self.margin_y = 200
+        self.color_scheme  = 'Tableau10'
         self.user_to_color = {}
         self.source_img = defaultdict(lambda: None)
         self.img_list = bbl.get_image_list();
@@ -91,8 +94,12 @@ class Plotter:
         return fnt
 
     def assign_colors_to_users(self):
-        # color list from https://towardsdatascience.com/making-publication-quality-figures-in-python-part-ii-line-plot-legends-colors-4430a5891706
-        color_list = ['#1f77b4cc', '#ff7f0ecc', '#2ca02ccc', '#d62728cc', '#9467bdcc', '#8c564bcc', '#e377c2cc', '#7f7f7fcc', '#bcbd22cc', '#17becfcc']
+
+        logging.info(f" - color_scheme = {self.color_scheme}") 
+        c = ColorSchemeTableau()
+        color_list = c.get_colors_list(self.color_scheme)
+        logging.info(f" color_list = {color_list}")
+
         i = 0
         for user in self.bbl.stats.user_list:
             self.user_to_color[user] = color_list[i]
@@ -167,6 +174,12 @@ image = {image_name} class = {cls}
         if not dset.visible_outer and dset.visible_inner:
             filter_criteria['class_type'] = 'meristem'
         # must be both on...both off wouldn't have reached this far
+
+        # ok update color scheme
+        if self.color_scheme != dset.color_scheme:
+            self.color_scheme = dset.color_scheme
+            self.assign_colors_to_users()
+
 
         obj_list = self.bbl.filter(self.bbl.bbox_obj_list, **filter_criteria)
         # only select boxes matching dset
