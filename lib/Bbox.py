@@ -7,7 +7,7 @@ import math
 import time
 from collections import defaultdict
 from glob import glob
-import pudb
+#import pudb
 import logging
 from random import randint
 
@@ -113,6 +113,8 @@ class BboxList:
             dir.append(obj.dir)
         dir = sorted(set(dir))
         user_to_dir_map = self.get_min_path_to_make_unique(dir)
+        logging.info(f" user_to_dir_map = {user_to_dir_map}")
+        #import pdb; pdb.set_trace()
 
         dir_to_user_map = defaultdict(str)
         for user,d  in user_to_dir_map.items():
@@ -125,17 +127,16 @@ class BboxList:
     def get_min_path_to_make_unique(self, dir):
 
         # what is the longest number of paths in any dir?
-        max_dir_depth = 0
-        sep = os.path.sep
-        for d in dir:
-            if d.count(sep) > max_dir_depth:
-                max_dir_depth = d.count(sep)
+        # need to deal with mixed slash paths (cygwin?)
 
-        # ok now count up to this limit to see if there are any duplicates
-        for i in range(1, max_dir_depth):
+        # count from tail up each dir path..assuming all paths are really about the same
+        i = 0
+        while True:
+            i += 1
             dir_map = defaultdict(lambda: 0)
             for d in dir:
-                tail_list = d.split(sep)[-i:]
+                d = d.replace(os.path.sep,'/')
+                tail_list = d.split('/')[-i:]
                 tail_str  = '_'.join(tail_list)
                 tail_srr  = tail_str.replace(" ", "_")
                 logging.info(f" trying {i} tail = {tail_str} for path = {d}")
@@ -254,8 +255,8 @@ class BboxList:
                 if user == obj_src.user:
                     continue
                 tgt_obj_list = self.filter(tgt_all_obj_list, user = user )
-                logging.info(f" checking filter for {user} filter for list= {tgt_obj_list}")
-                obj_src.iou[user] = self.compute_iou_obj_list(obj_src, tgt_obj_list)
+                #logging.info(f" checking filter for {user} filter for list= {tgt_obj_list}")
+                obj_src.iou[user], _ = self.compute_iou_obj_list(obj_src, tgt_obj_list)
             #logging.info(f" iou for {obj_src} is {obj_src.iou}")
 
 
@@ -264,14 +265,16 @@ class BboxList:
         compute the intersection over union between obj_src and tgt_obj_list, returning the max value
         """
         iou_max = 0
+        max_iou_userclass = None
         for obj_tgt in tgt_obj_list:
             iou = self.compute_iou_bbox_pair(obj_src.bbox, obj_tgt.bbox)
             if iou > iou_max:
                 iou_max = iou
+                max_iou_userclass = f"{obj_tgt.class_base} by {obj_tgt.user}"
 
         iou_max = round(iou_max,2)
         #logging.info(f"box_src={obj_src.bbox} bbox_list={tgt_obj_list} iou_max={iou_max}")
-        return iou_max
+        return iou_max, max_iou_userclass
 
                         
 
@@ -306,20 +309,21 @@ class BboxList:
         # for any outer box with less than 0.3 score but would be 0.6 in another class
         iou_threshold = {}
         iou_threshold['same_class'] = 0.2 
-        iou_threshold['different_class'] = 0.5 
+        iou_threshold['diff_class'] = 0.5 
 
         obj_list = self.filter(self.bbox_obj_list,  class_type = 'outer')
 
         for image in self.stats.image_list:
             obj_list_f = self.filter(obj_list,  image = image)
             for obj in obj_list_f:
+
                 max_iou_same = max(obj.iou.values())
                 if max_iou_same < iou_threshold['same_class']:
                     obj_list_f = self.rfilter(obj_list_f, class_base = obj.class_base)
-                    max_iou_diff = self.compute_iou_obj_list(obj, obj_list_f)
-                    if max_iou_diff > iou_threshold['different_class']:
+                    max_iou_diff, max_iou_userclass = self.compute_iou_obj_list(obj, obj_list_f)
+                    if max_iou_diff > iou_threshold['diff_class']:
                         # potential mis-label!
-                        obj.warning = f"potential mis-label : same iou = {max_iou_same} but against another class iou = {max_iou_diff}"
+                        obj.warning = f"\n{obj.class_base} by {obj.user}\n{max_iou_userclass}"
                         logging.info(obj.warning)
             
     

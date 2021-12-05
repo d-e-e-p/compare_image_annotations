@@ -60,10 +60,14 @@ def validate_args(args: argparse.Namespace):
 
 def main(): 
     args = parse_args()
+
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, force=True)
+        logging.basicConfig(format='%(levelname)s %(module)s %(funcName)s %(lineno)d %(message)s', force=True)
+        logging.warning(args)
     else:
         logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(format='%(levelname)s %(message)s', force=True)
 
     logging.debug(args)
     # return if validate fails to find dirs

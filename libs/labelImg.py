@@ -138,7 +138,7 @@ class MainWindow(QMainWindow, WindowMixin):
         #self.load_predefined_classes(default_prefdef_class_file)
 
         # Main widgets and related state.
-        self.label_dialog = LabelDialog(parent=self, list_item=self.label_hist)
+        #self.label_dialog = LabelDialog(parent=self, list_item=self.label_hist)
 
         self.items_to_shapes = {}
         self.shapes_to_items = {}
@@ -147,20 +147,15 @@ class MainWindow(QMainWindow, WindowMixin):
         list_layout = QVBoxLayout()
         list_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.class_outer_button = QCheckBox("Plant Outer")
-        self.class_outer_button.setChecked(True)
-        self.class_outer_button.stateChanged.connect(self.draw_iou_boxes)
-        list_layout.addWidget(self.class_outer_button)
-
-        self.class_inner_button = QCheckBox("Plant Inner")
-        self.class_inner_button.setChecked(True)
-        self.class_inner_button.stateChanged.connect(self.draw_iou_boxes)
-        list_layout.addWidget(self.class_inner_button)
-
-        self.class_inout_button = QCheckBox("Plant Stem-to-Outer")
-        self.class_inout_button.setChecked(False)
-        self.class_inout_button.stateChanged.connect(self.draw_iou_boxes)
-        list_layout.addWidget(self.class_inout_button)
+        self.class_type_button = {}
+        for class_type in "outer inner inout".split():
+            self.class_type_button[class_type] = QCheckBox(get_str(class_type))
+            if class_type == "inout":
+                self.class_type_button[class_type].setChecked(False)
+            else:
+                self.class_type_button[class_type].setChecked(True)
+            self.class_type_button[class_type].stateChanged.connect(self.draw_iou_boxes)
+            list_layout.addWidget(self.class_type_button[class_type])
 
         list_layout.addSpacing(50)
 
@@ -209,7 +204,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.colorBackgroundSlider.valueChanged.connect(self.adjust_background_changed)
         list_layout.addWidget(self.colorBackgroundSlider)
 
-        foregroundLabel = QLabel("annotation brightness")
+        foregroundLabel = QLabel("annotation dark -> light")
         foregroundLabel.setAlignment(Qt.AlignCenter)
         list_layout.addWidget(foregroundLabel)
 
@@ -220,8 +215,9 @@ class MainWindow(QMainWindow, WindowMixin):
         self.colorForegroundSlider.valueChanged.connect(self.adjust_foreground_changed)
         list_layout.addWidget(self.colorForegroundSlider)
 
+
         # Add some of widgets to list_layout
-        list_layout.addStretch()
+        #list_layout.addStretch()
 
         # Tzutalin 20160906 : Add file list and dock to move faster
 #        self.file_list = QListWidget()
@@ -259,7 +255,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
 
-
            # file list
         self.file_list_widget = QListWidget()
         self.file_list_widget.itemDoubleClicked.connect(self.file_item_double_clicked)
@@ -273,7 +268,6 @@ class MainWindow(QMainWindow, WindowMixin):
         #list = self.file_list_widget
         #self.file_list_widget.setFixedSize(\
         #    list.sizeHintForColumn(0) + 2 * list.frameWidth(), list.sizeHintForRow(0) * list.count() + 2 * list.frameWidth())
-
 
         # size the file list to 10 lines
         file_list_container = QWidget()
@@ -294,6 +288,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.class_dock = QDockWidget(get_str('classList'), self)
         self.class_dock.setObjectName(get_str('classes'))
         self.class_dock.setWidget(class_list_container)
+        logging.info(f"self.class_list_widget = {self.class_list_widget}")
 
         # based on list of users make up buttons for reference user
 
@@ -302,7 +297,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.staff_buttons = {}
         for user in self.bbl.stats.user_list:
             self.staff_buttons[user] = QRadioButton(user)
-            self.staff_buttons[user].toggled.connect(partial(self.staff_button_toggled, user))
+            #self.staff_buttons[user].toggled.connect(partial(self.staff_button_toggled, user))
             self.staff_box_widget.addWidget(self.staff_buttons[user])
 
         staff_list_container = QWidget()
@@ -1431,11 +1426,13 @@ class MainWindow(QMainWindow, WindowMixin):
         self.img_count = len(self.m_img_list)
         self.open_next_image()
         for imgPath in self.m_img_list:
-            imgName = Path(imgPath).stem
             # TODO: make sure this is unique
-            self.image_basename_to_path[imgName] = imgPath
-            item = QListWidgetItem(imgName)
-            self.file_list_widget.addItem(item)
+            imgName = Path(imgPath).stem
+            # only load images with annotations!
+            if self.bbl.stats.image_to_class_map[imgName]:
+                self.image_basename_to_path[imgName] = imgPath
+                item = QListWidgetItem(imgName)
+                self.file_list_widget.addItem(item)
         # unrelated but this is a good time to load list of users 
         #self.update_combo_box()
 
@@ -1731,12 +1728,15 @@ class MainWindow(QMainWindow, WindowMixin):
         self.current_image = imgName
         class_list = self.bbl.stats.image_to_class_map[imgName]
         logging.info(f"class list for {imgName} is {class_list}")
+        if not class_list:
+            return
         self.class_list_widget.clear()
         for cls in class_list:
             self.class_list_widget.addItem(cls)
         # make one of the items in the list selected
         self.class_list_widget.setCurrentRow(0)
         # also make it setselected to true
+        #import pdb; pdb.set_trace()
         self.class_list_widget.item(0).setSelected(True)
         # ok now set a reference user if nobody is defined
         if not self.ref_user:
@@ -1815,10 +1815,10 @@ class MainWindow(QMainWindow, WindowMixin):
         for user in self.bbl.stats.user_list:
             visible_users[user] = self.user_button[user].isChecked()
 
+        # class type
         visible_types = {}
-        visible_types['outer'] = self.class_outer_button.isChecked()
-        visible_types['inner'] = self.class_inner_button.isChecked()
-        visible_types['inout'] = self.class_inout_button.isChecked()
+        for class_type in "outer inner inout".split():
+            visible_types[class_type] = self.class_type_button[class_type].isChecked()
 
         dobj = DrawObject(image, class_base, self.ref_user, visible_types, visible_users, self.iou_filter_value,
                         self.color_scheme , self.adjust_background, self.adjust_foreground,)

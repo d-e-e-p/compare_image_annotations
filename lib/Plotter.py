@@ -213,7 +213,7 @@ image = {image_name} class = {cls}
 
         # factor : 0.5 darkens to 1.5 lightens:  adjust_foreground is from 0 to 10
         # map a number from 0 to 10 to 0.5 to 1.5
-        factor =  (dset.adjust_foreground / 10.0) * 2.0
+        factor =  (dset.adjust_foreground / 5.0) 
         enhancer = ImageEnhance.Brightness(imgobj)
         imgobj = enhancer.enhance(factor)
 
@@ -226,6 +226,7 @@ image = {image_name} class = {cls}
 
         # already removed all invalid boxes (non visible users etc)
 
+        # inout lines don't need text or rect
         if type != "inout": 
             for obj in obj_list:
                 color = self.user_to_color[obj.user]
@@ -238,8 +239,18 @@ image = {image_name} class = {cls}
                     txt = f"iou={iou_value}"
                 #logging.info(f" calc: user={user} ref={ref_user} iou = {obj.iou}")
                 xloc, yloc = self.get_random_nearby_loc(obj.bbox);
-                x1, y1, x2, y2 = obj.bbox
                 img.text((xloc,yloc), txt , font=self.fnt, fill=color)
+                if obj.warning is not None:
+                    txt = f"potential mis-label!\n{obj.warning}"
+                    width, height = self.source_img[obj.image].size
+                    textwidth, textheight = img.textsize(txt, self.fnt)
+                    # correct loc is if off screen
+                    xloc, yloc = self.get_random_nearby_loc(obj.bbox);
+                    if xloc + textwidth > width:
+                        xloc = width - textwidth
+                    if yloc + textheight > height:
+                        yloc = height - textheight
+                    img.text((xloc,yloc), txt , font=self.fnt, fill='red')
 
         else:
             for obj in obj_list:
