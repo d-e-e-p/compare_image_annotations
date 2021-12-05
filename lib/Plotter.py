@@ -6,7 +6,7 @@
 
 import sys
 from collections import defaultdict, OrderedDict
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 from os.path import exists, join
 import logging
 import io
@@ -20,26 +20,33 @@ from lib.ColorschemeTableau import ColorSchemeTableau
 import pudb
 
 class DrawObject(object):
-    def __init__(self, image, class_base, ref_user, visible_outer, visible_inner , visible_users, color_scheme):
+    def __init__(self, image, class_base, ref_user, visible_types, visible_users, iou_filter_value,
+            color_scheme, adjust_background, adjust_foreground):
         self.image = image
         self.class_base = class_base
         self.ref_user = ref_user
-        self.visible_outer = visible_outer
-        self.visible_inner = visible_inner
+        self.visible_types = visible_types
         self.visible_users = visible_users
+        self.iou_filter_value = iou_filter_value
         self.color_scheme  = color_scheme
+        self.adjust_background  = adjust_background
+        self.adjust_foreground  = adjust_foreground
 
+    # yeah not reccomended but works in this case...
     def __eq__(self, other): 
-        if  self.image         == other.image and         \
-            self.class_base    == other.class_base and    \
-            self.ref_user      == other.ref_user and      \
-            self.visible_outer == other.visible_outer and \
-            self.visible_inner == other.visible_inner and \
-            self.visible_users == other.visible_users and \
-            self.color_scheme  == other.color_scheme:
-            return True 
+
+        if not isinstance(other, DrawObject):
+            return False
+
+        for attr in self.__dict__ :
+            if getattr(self, attr) != getattr(other, attr):
+                return False
+
+        return True
+
+
     def __str__(self):
-        return f"i={self.image} c={self.class_base} ru={self.ref_user} vo={self.visible_outer} vi={self.visible_inner} vu={self.visible_users} cs={self.color_scheme}"
+        return f"i={self.image} c={self.class_base} ru={self.ref_user} vt={self.visible_types} vu={self.visible_users} cs={self.color_scheme} ab={self.adjust_background} af={self.adjust_foreground}"
 
 class Plotter:
     def __init__(self, bbl, img_dir, out_dir):
@@ -54,6 +61,7 @@ class Plotter:
         self.read_images(img_dir)
         self.add_margins()
         self.assign_colors_to_users()
+        self.fnt = self.get_font();
         self.plot_iou_boxes(bbl, out_dir)
 
     # make sure all images exist in img_dir
@@ -68,7 +76,8 @@ class Plotter:
                     logging.warning(f" image file not actually an image: {file_name}")
 
             else:
-                logging.warning(f" image file missing: {file_name}")
+                logging.error(f" image file missing: expecting {file_name}")
+                exit(-1)
 
     def add_margins(self):
         for image_name in self.img_list:
@@ -112,7 +121,6 @@ class Plotter:
         """
         loop thru each image and any annotations on that image to create a report
         """
-        fnt = self.get_font();
 
         # find all classes per image
         image_name_to_class = defaultdict(set)
@@ -134,7 +142,7 @@ class Plotter:
 image = {image_name} class = {cls}
 """
                     img1 = ImageDraw.Draw(dest_img[key])
-                    img1.multiline_text((10,height-self.margin_y), txt , font=fnt, fill=(255, 255, 255))
+                    img1.multiline_text((10,height-self.margin_y), txt , font=self.fnt, fill=(255, 255, 255))
 
         # loop thru all boxes and draw them on dest
         #fnt = ImageFont.truetype('cour.ttf', 14)
@@ -142,11 +150,13 @@ image = {image_name} class = {cls}
             key = f"{obj.image}_{obj.class_base}_{obj.class_type}"
             if key in dest_img:
                 img1 = ImageDraw.Draw(dest_img[key])
-                iou_value = obj.iou
-                txt = f"iou={iou_value}"
-                x1, y1, x2, y2 = obj.bbox
-                img1.text((x1+10,y1+10), txt , font=fnt, fill=(0, 0, 0))
                 img1.rounded_rectangle(obj.bbox, radius=10, fill=None, outline=(0,255,0,128), width=2)
+                ref_user = bbl.get_best_ref_user(obj.image, obj.class_base)
+                if ref_user != obj.user:
+                    iou_value = obj.iou[ref_user]
+                    txt = f"iou={iou_value:.2f}"
+                    x1, y1, x2, y2 = obj.bbox
+                    img1.text((x1+10,y1+10), txt , font=self.fnt, fill=(0, 0, 0))
                 #img1.rounded_rectangle(revised_box, radius=10, fill=None, outline=(255,0,0,128), width=2)
 
         # save destination images
@@ -160,51 +170,92 @@ image = {image_name} class = {cls}
         # what's the size of thie image?
         width, height = self.source_img[dset.image].size
         imgobj = Image.new('RGBA', (width, height), (255, 0, 0, 0))
-        #imgobj = Image.new('RGB', (width, height), ( 0, 0, 0))
+
+        #imgobj = self.source_img[dset.image].copy()
+        #factor =  (dset.adjust_background / 10) + 0.5
+        #enhancer = ImageEnhance.Brightness(imgobj)
+        #imgobj = enhancer.enhance(factor)
+
+
         img = ImageDraw.Draw(imgobj)
-        fnt = self.get_font();
 
         # first filter based on matching image/class
         filter_criteria = {}
         filter_criteria['image']      = dset.image
         filter_criteria['class_base'] = dset.class_base
+        obj_list = self.bbl.filter(self.bbl.bbox_obj_list, **filter_criteria)
 
-        if dset.visible_outer and not dset.visible_inner:
-            filter_criteria['class_type'] = 'outer'
-        if not dset.visible_outer and dset.visible_inner:
-            filter_criteria['class_type'] = 'meristem'
-        # must be both on...both off wouldn't have reached this far
+        # now visible users only
+        obj_list = self.bbl.filter_visible_users(obj_list, dset.visible_users)
 
-        # ok update color scheme
+        # if iou filter then prune here
+        if dset.iou_filter_value < 10:
+            obj_list = self.bbl.filter_by_iou_value(obj_list, dset.ref_user,  dset.iou_filter_value)
+
+
+        # ok now update color scheme
         if self.color_scheme != dset.color_scheme:
             self.color_scheme = dset.color_scheme
             self.assign_colors_to_users()
+        
+        # handle the 3 cases : inout just needs outer objects for now
+        if dset.visible_types['outer']:
+            obj_list_f = self.bbl.filter(obj_list, class_type = 'outer')
+            self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, "outer")
 
+        if dset.visible_types['inout']:
+            obj_list_f = self.bbl.filter(obj_list, has_associated_inner = True)
+            self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, "inout")
 
-        obj_list = self.bbl.filter(self.bbl.bbox_obj_list, **filter_criteria)
-        # only select boxes matching dset
-        for obj in obj_list:
-            user = self.bbl.stats.dir_to_user_map[obj.dir]
+        if dset.visible_types['inner']:
+            obj_list_f = self.bbl.filter(obj_list, class_type = 'meristem')
+            self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, "inner")
 
-            if  dset.visible_users[user]:
-                color = self.user_to_color[user]
-                if user == dset.ref_user:
-                    txt = 'R'
-                else:
-                    iou_value = obj.iou[dset.ref_user]
-                    txt = f"iou={iou_value}"
-
-                xloc, yloc = self.get_random_loc(obj.bbox);
-
-                x1, y1, x2, y2 = obj.bbox
-                img.text((xloc,yloc), txt , font=fnt, fill=color)
-                img.rounded_rectangle(obj.bbox, radius=10, fill=None, outline=color, width=2)
+        # factor : 0.5 darkens to 1.5 lightens:  adjust_foreground is from 0 to 10
+        # map a number from 0 to 10 to 0.5 to 1.5
+        factor =  (dset.adjust_foreground / 10.0) * 2.0
+        enhancer = ImageEnhance.Brightness(imgobj)
+        imgobj = enhancer.enhance(factor)
 
         bytes_img = io.BytesIO()
         imgobj.save(bytes_img, format='PNG')
         return bytes_img.getvalue()
 
-    def get_random_loc(self, bbox):
+
+    def draw_boxes_for_object(self, img, obj_list, ref_user, type):
+
+        # already removed all invalid boxes (non visible users etc)
+
+        if type != "inout": 
+            for obj in obj_list:
+                color = self.user_to_color[obj.user]
+                img.rounded_rectangle(obj.bbox, radius=10, fill=None, outline=color, width=2)
+
+                if obj.user == ref_user:
+                    txt = 'R'
+                else:
+                    iou_value = obj.iou[ref_user]
+                    txt = f"iou={iou_value}"
+                #logging.info(f" calc: user={user} ref={ref_user} iou = {obj.iou}")
+                xloc, yloc = self.get_random_nearby_loc(obj.bbox);
+                x1, y1, x2, y2 = obj.bbox
+                img.text((xloc,yloc), txt , font=self.fnt, fill=color)
+
+        else:
+            for obj in obj_list:
+                if obj.meristem is not None:
+                    color = self.user_to_color[obj.user]
+
+                    # draw connector from stem to outer
+                    x1o, y1o, x2o, y2o = obj.bbox
+                    x1i, y1i, x2i, y2i = obj.meristem.bbox
+                    shape = [(x1i, y1i), (x1o, y1o)] ; img.line(shape, fill=color, width = 3)
+                    shape = [(x1i, y2i), (x1o, y2o)] ; img.line(shape, fill=color, width = 3)
+                    shape = [(x2i, y2i), (x2o, y2o)] ; img.line(shape, fill=color, width = 3)
+                    shape = [(x2i, y1i), (x2o, y1o)] ; img.line(shape, fill=color, width = 3)
+
+
+    def get_random_nearby_loc(self, bbox):
         """
         position labels in different places
         """
@@ -220,6 +271,7 @@ image = {image_name} class = {cls}
     # from https://note.nkmk.me/en/python-pillow-add-margin-expand-canvas/
     @staticmethod
     def add_margin(pil_img, top, right, bottom, left, color):
+        logging.info(f" pil = {pil_img}")
         width, height = pil_img.size
         new_width = width + right + left
         new_height = height + top + bottom

@@ -28,7 +28,7 @@ from PyQt5.QtCore import (QByteArray, QFileInfo, QPoint, QPointF, QProcess, QSiz
 from PyQt5.QtWidgets import (QAction, QApplication, QCheckBox, QDockWidget, QFileDialog,
                              QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
                              QMainWindow, QMenu, QMessageBox, QRadioButton, QScrollArea,
-                             QToolButton, QVBoxLayout, QWidget, QWidgetAction, QComboBox)
+                             QToolButton, QVBoxLayout, QWidget, QWidgetAction, QComboBox, QSlider)
 
 from libs.combobox import ComboBox
 from libs.constants import (FORMAT_CREATEML, FORMAT_PASCALVOC, FORMAT_YOLO, SETTING_ADVANCE_MODE,
@@ -102,7 +102,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.pl  = pl
         self.ref_user = ""
         self.current_image = ""
-        self.current_draw_object = DrawObject("", "", "", False, False, [], "")
+        self.current_draw_object = None
+        self.iou_filter_value = 10
 
         # Load string bundle for i18n
         self.string_bundle = StringBundle.get_bundle()
@@ -120,6 +121,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.cur_img_idx = 0
         self.img_count = len(self.m_img_list)
         self.color_scheme = None
+        self.adjust_foreground =  5     # brightness
+        self.adjust_background = 10     # transparency
 
         # record image to path (assume unique names!)
         self.image_basename_to_path = defaultdict(str)
@@ -143,24 +146,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
         list_layout = QVBoxLayout()
         list_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Create a widget for using default label
-        self.use_default_label_checkbox = QCheckBox(get_str('useDefaultLabel'))
-        self.use_default_label_checkbox.setChecked(False)
-        self.default_label_text_line = QLineEdit()
-        use_default_label_qhbox_layout = QHBoxLayout()
-        use_default_label_qhbox_layout.addWidget(self.use_default_label_checkbox)
-        use_default_label_qhbox_layout.addWidget(self.default_label_text_line)
-        use_default_label_container = QWidget()
-        use_default_label_container.setLayout(use_default_label_qhbox_layout)
-
-        # Create a widget for edit and diffc button
-        self.diffc_button = QCheckBox(get_str('useDifficult'))
-        self.diffc_button.setChecked(False)
-        self.diffc_button.stateChanged.connect(self.button_state)
-
-        self.edit_button = QToolButton()
-        self.edit_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
 
         self.class_outer_button = QCheckBox("Plant Outer")
         self.class_outer_button.setChecked(True)
@@ -186,19 +171,67 @@ class MainWindow(QMainWindow, WindowMixin):
             self.user_button[user].stateChanged.connect(self.draw_iou_boxes)
             list_layout.addWidget(self.user_button[user])
 
+        list_layout.addSpacing(10)
+
+        iouLabel = QLabel("IOU Filter")
+        iouLabel.setAlignment(Qt.AlignCenter)
+        list_layout.addWidget(iouLabel)
+
+        self.iouFilterSlider = QSlider(Qt.Horizontal)
+        self.iouFilterSlider.setMinimum(0)
+        self.iouFilterSlider.setMaximum(10)
+        self.iouFilterSlider.setValue(self.iou_filter_value)
+        self.iouFilterSlider.valueChanged.connect(self.iou_filter_value_changed)
+        list_layout.addWidget(self.iouFilterSlider)
 
         # color selection
-        list_layout.addSpacing(50)
+        list_layout.addSpacing(20)
 
-        self.colorLabel = QLabel("Color Scheme:")
-        self.colorLabel.setAlignment(Qt.AlignCenter)
-        list_layout.addWidget(self.colorLabel)
+        colorLabel = QLabel("Color Scheme:")
+        colorLabel.setAlignment(Qt.AlignCenter)
+        list_layout.addWidget(colorLabel)
 
         self.colorBox = QComboBox()
         self.set_color_scheme_options(self.colorBox)
         self.colorBox.currentIndexChanged.connect(self.color_scheme_changed)
         self.colorBox.setCurrentIndex(0)
         list_layout.addWidget(self.colorBox)
+
+        # slider for background and foreground
+        backgroundLabel = QLabel("background opacity")
+        backgroundLabel.setAlignment(Qt.AlignCenter)
+        list_layout.addWidget(backgroundLabel)
+
+        self.colorBackgroundSlider = QSlider(Qt.Horizontal)
+        self.colorBackgroundSlider.setMinimum(0)
+        self.colorBackgroundSlider.setMaximum(10)
+        self.colorBackgroundSlider.setValue(self.adjust_background)
+        self.colorBackgroundSlider.valueChanged.connect(self.adjust_background_changed)
+        list_layout.addWidget(self.colorBackgroundSlider)
+
+        foregroundLabel = QLabel("annotation brightness")
+        foregroundLabel.setAlignment(Qt.AlignCenter)
+        list_layout.addWidget(foregroundLabel)
+
+        self.colorForegroundSlider = QSlider(Qt.Horizontal)
+        self.colorForegroundSlider.setMinimum(0)
+        self.colorForegroundSlider.setMaximum(10)
+        self.colorForegroundSlider.setValue(self.adjust_foreground)
+        self.colorForegroundSlider.valueChanged.connect(self.adjust_foreground_changed)
+        list_layout.addWidget(self.colorForegroundSlider)
+
+        # Add some of widgets to list_layout
+        list_layout.addStretch()
+
+        # Tzutalin 20160906 : Add file list and dock to move faster
+#        self.file_list = QListWidget()
+#        file_list = QLabel(get_str('fileList'))
+#        file_list.setContentsMargins(0, 0, 0, 0)
+#        file_list.setAlignment(Qt.AlignTop)
+#        file_list.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Ignored)
+#        file_list.setWordWrap(True)
+#
+#        self.dock = QDockWidget(get_str('fileList'), self)
 
         # Add some of widgets to list_layout
         #list_layout.addWidget(self.edit_button)
@@ -233,6 +266,16 @@ class MainWindow(QMainWindow, WindowMixin):
         file_list_layout = QVBoxLayout()
         file_list_layout.setContentsMargins(0, 0, 0, 0)
         file_list_layout.addWidget(self.file_list_widget)
+        file_list_layout.setAlignment(Qt.AlignCenter)
+
+        self.file_list_widget.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.file_list_widget.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        #list = self.file_list_widget
+        #self.file_list_widget.setFixedSize(\
+        #    list.sizeHintForColumn(0) + 2 * list.frameWidth(), list.sizeHintForRow(0) * list.count() + 2 * list.frameWidth())
+
+
+        # size the file list to 10 lines
         file_list_container = QWidget()
         file_list_container.setLayout(file_list_layout)
 
@@ -421,10 +464,6 @@ class MainWindow(QMainWindow, WindowMixin):
             self.MANUAL_ZOOM: lambda: 1,
         }
 
-        edit = action(get_str('editLabel'), self.edit_label,
-                      'Ctrl+E', 'edit', get_str('editLabelDetail'),
-                      enabled=False)
-        self.edit_button.setDefaultAction(edit)
 
         shape_line_color = action(get_str('shapeLineColor'), self.choose_shape_line_color,
                                   icon='color_line', tip=get_str('shapeLineColorDetail'),
@@ -437,13 +476,6 @@ class MainWindow(QMainWindow, WindowMixin):
         labels.setText(get_str('showHide'))
         labels.setShortcut('Ctrl+Shift+L')
 
-        # Label list context menu.
-        label_menu = QMenu()
-        add_actions(label_menu, (edit, delete))
-        self.label_list.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.label_list.customContextMenuRequested.connect(
-            self.pop_label_list_menu)
-
         # Draw squares/rectangles
         self.draw_squares_option = QAction(get_str('drawSquares'), self)
         self.draw_squares_option.setShortcut('Ctrl+Shift+R')
@@ -453,7 +485,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Store actions for further handling.
         self.actions = Struct(save=save, save_format=save_format, saveAs=save_as, open=open, close=close, resetAll=reset_all, deleteImg=delete_image,
-                              lineColor=color1, create=create, delete=delete, edit=edit, copy=copy,
+                              lineColor=color1, create=create, delete=delete, copy=copy,
                               createMode=create_mode, editMode=edit_mode, advancedMode=advanced_mode,
                               shapeLineColor=shape_line_color, shapeFillColor=shape_fill_color,
                               zoom=zoom, zoomIn=zoom_in, zoomOut=zoom_out, zoomOrg=zoom_org,
@@ -462,10 +494,10 @@ class MainWindow(QMainWindow, WindowMixin):
                               fileMenuActions=(
                                   open, open_dir, save, save_as, close, reset_all, quit),
                               beginner=(), advanced=(),
-                              editMenu=(edit, copy, delete,
+                              editMenu=(copy, delete,
                                         None, color1, self.draw_squares_option),
-                              beginnerContext=(create, edit, copy, delete),
-                              advancedContext=(create_mode, edit_mode, edit, copy,
+                              beginnerContext=(create, copy, delete),
+                              advancedContext=(create_mode, edit_mode, copy,
                                                delete, shape_line_color, shape_fill_color),
                               onLoadActive=(
                                   close, create, create_mode, edit_mode),
@@ -476,8 +508,7 @@ class MainWindow(QMainWindow, WindowMixin):
             edit=self.menu(get_str('menu_edit')),
             view=self.menu(get_str('menu_view')),
             help=self.menu(get_str('menu_help')),
-            recentFiles=QMenu(get_str('menu_openRecent')),
-            labelList=label_menu)
+            recentFiles=QMenu(get_str('menu_openRecent')),)
 
         # Auto saving : Enable auto saving if pressing next
         self.auto_saving = QAction(get_str('autoSaveMode'), self)
@@ -771,16 +802,20 @@ class MainWindow(QMainWindow, WindowMixin):
         self.show_tutorial_dialog(browser='default', link='https://github.com/tzutalin/labelImg#Hotkeys')
 
     def create_shape(self):
+        logging.info(f"-->creating shape")
         assert self.beginner()
         self.canvas.set_editing(False)
         self.actions.create.setEnabled(False)
+        logging.info(f"<--creating shape")
 
     def toggle_drawing_sensitive(self, drawing=True):
         """In the middle of drawing, toggling between modes should be disabled."""
+        return
         self.actions.editMode.setEnabled(not drawing)
         if not drawing and self.beginner():
             # Cancel creation.
             print('Cancel creation.')
+            pu.db
             self.canvas.set_editing(True)
             self.canvas.restore_cursor()
             self.actions.create.setEnabled(True)
@@ -1014,22 +1049,23 @@ class MainWindow(QMainWindow, WindowMixin):
 
         position MUST be in global coordinates.
         """
-        if not self.use_default_label_checkbox.isChecked() or not self.default_label_text_line.text():
-            if len(self.label_hist) > 0:
-                self.label_dialog = LabelDialog(
-                    parent=self, list_item=self.label_hist)
-
-            # Sync single class mode from PR#106
-            if self.single_class_mode.isChecked() and self.lastLabel:
-                text = self.lastLabel
-            else:
-                text = self.label_dialog.pop_up(text=self.prev_label_text)
-                self.lastLabel = text
-        else:
-            text = self.default_label_text_line.text()
+#        if not self.use_default_label_checkbox.isChecked() or not self.default_label_text_line.text():
+#            if len(self.label_hist) > 0:
+#                self.label_dialog = LabelDialog(
+#                    parent=self, list_item=self.label_hist)
+#
+#            # Sync single class mode from PR#106
+#            if self.single_class_mode.isChecked() and self.lastLabel:
+#                text = self.lastLabel
+#            else:
+#                text = self.label_dialog.pop_up(text=self.prev_label_text)
+#                self.lastLabel = text
+#        else:
+#            text = self.default_label_text_line.text()
 
         # Add Chris
-        self.diffc_button.setChecked(False)
+        #self.diffc_button.setChecked(False)
+        text = "T"
         if text is not None:
             self.prev_label_text = text
             generate_color = generate_color_by_text(text)
@@ -1709,6 +1745,14 @@ class MainWindow(QMainWindow, WindowMixin):
             self.staff_buttons[self.ref_user].setChecked(True)
             logging.info(f"user = {self.ref_user} button status = {self.staff_buttons[self.ref_user].isChecked()}")
 
+    # iou filter value changed
+    def iou_filter_value_changed(self):
+        value = self.iouFilterSlider.value()
+        if value != self.iou_filter_value:
+            self.iou_filter_value = value
+            self.draw_iou_boxes()
+
+
     # trigger update on new color scheme
     def color_scheme_changed(self):
         # get color scheme from combo box
@@ -1717,6 +1761,19 @@ class MainWindow(QMainWindow, WindowMixin):
             self.color_scheme = txt
             self.draw_iou_boxes()
 
+    def adjust_background_changed(self):
+        # get value from slider
+        value = self.colorBackgroundSlider.value()
+        if self.adjust_background != value:
+            self.adjust_background = value
+            self.draw_iou_boxes()
+
+    def adjust_foreground_changed(self):
+        # get value from slider
+        value = self.colorForegroundSlider.value()
+        if self.adjust_foreground != value:
+            self.adjust_foreground = value
+            self.draw_iou_boxes()
 
     def set_color_scheme_options(self, widget):
         c = ColorSchemeTableau()
@@ -1758,19 +1815,19 @@ class MainWindow(QMainWindow, WindowMixin):
         for user in self.bbl.stats.user_list:
             visible_users[user] = self.user_button[user].isChecked()
 
-        visible_outer = self.class_outer_button.isChecked()
-        visible_inner = self.class_inner_button.isChecked()
-        visible_inout = self.class_inout_button.isChecked()
+        visible_types = {}
+        visible_types['outer'] = self.class_outer_button.isChecked()
+        visible_types['inner'] = self.class_inner_button.isChecked()
+        visible_types['inout'] = self.class_inout_button.isChecked()
 
-        if not visible_outer and not visible_inner:
-            logging.info(f"draw: no boxes to draw")
-            return
-
-        dobj = DrawObject(image, class_base, self.ref_user, visible_outer, visible_inner , visible_users, self.color_scheme)
+        dobj = DrawObject(image, class_base, self.ref_user, visible_types, visible_users, self.iou_filter_value,
+                        self.color_scheme , self.adjust_background, self.adjust_foreground,)
         if dobj != self.current_draw_object:
             self.current_draw_object = dobj
             logging.info(f"draw: new draw object {dobj}")
             self.draw_overlay_on_canvas()
+        else:
+            logging.info(f"draw: nothing to do : same settings {dobj}")
 
     def draw_overlay_on_canvas(self):
         if self.current_draw_object.image != self.current_image:
@@ -1780,7 +1837,7 @@ class MainWindow(QMainWindow, WindowMixin):
         qimg = QImage()
         qimg.loadFromData(img_data, format = 'PNG')
         pm = QPixmap.fromImage(qimg)
-        self.canvas.load_overlay(pm)
+        self.canvas.load_overlay(pm, self.adjust_background)
 
 
             

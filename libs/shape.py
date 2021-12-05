@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtGui import QColor, QPen
+from PyQt5.QtGui import QPainterPath
 
 from libs.utils import distance
 import sys

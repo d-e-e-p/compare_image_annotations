@@ -44,6 +44,7 @@ class Canvas(QWidget):
         self.label_font_size = 8
         self.pixmap = QPixmap()
         self.overlay = QPixmap()
+        self.adjust_background = 1
         self.visible = {}
         self._hide_background = False
         self.hide_background = False
@@ -496,7 +497,13 @@ class Canvas(QWidget):
         p.scale(self.scale, self.scale)
         p.translate(self.offset_to_center())
 
+        p.setBackground(QColor("black"))
+        p.setBackgroundMode(Qt.TransparentMode)
+        p.setBrush(QBrush(Qt.black, Qt.SolidPattern))
+        p.drawRect(0,0, self.pixmap.width(), self.pixmap.height())
+        p.setOpacity(self.adjust_background / 10.0)
         p.drawPixmap(0, 0, self.pixmap)
+        p.setOpacity(1) # opaque
         p.drawPixmap(0, 0, self.overlay)
 
         Shape.scale = self.scale
@@ -693,8 +700,9 @@ class Canvas(QWidget):
         self.shapes = []
         self.repaint()
 
-    def load_overlay(self, overlay):
+    def load_overlay(self, overlay, adjust_background):
         self.overlay = overlay
+        self.adjust_background = adjust_background
         self.shapes = []
         self.repaint()
 

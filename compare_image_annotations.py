@@ -63,7 +63,7 @@ def main():
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.WARNING)
 
     logging.debug(args)
     # return if validate fails to find dirs
@@ -76,6 +76,7 @@ def main():
     bbl.update_stats()
     bbl.associate_stem_with_outer()
     bbl.compute_iou_for_each_annotation()
+    bbl.locate_potential_mislabel()
     pl = Plotter(bbl, args.img, args.out)
 
     app, _win = run_main_gui(bbl, pl, args.img, args.out)

@@ -26,7 +26,10 @@ class Bbox:
         self.difficult  = difficult
         self.bbox = bbox
         self.meristem = None
+        self.has_associated_inner = False
         self.iou = {}
+        self.user = None
+        self.warning = None
 
 class Stats:
     def __init__ (self):
@@ -36,12 +39,12 @@ class Stats:
         self.user_to_dir_map    = defaultdict(str)
         self.dir_to_user_map    = defaultdict(str)
         self.image_to_class_map = defaultdict(list)
+        self.ref_user_map       = defaultdict(defaultdict)
 
 
 class BboxList:
     def __init__(self):
         self.bbox_obj_list = []
-        self.golden_dir = defaultdict(defaultdict)
         # after every update to bbox_obj_list , stats needs to be regenerated
         self.stats = Stats()
 
@@ -63,6 +66,24 @@ class BboxList:
                 items.append(item)
         return items
 
+    # prine list based on visible_users dict
+    # TODO: check that Stats has been run and db is not dirty
+    def filter_visible_users(self, bbox_obj_list, visible_users):
+        items = []
+        for item in bbox_obj_list:
+            if visible_users[item.user]:
+                items.append(item)
+        return items
+
+    def filter_by_iou_value(self, bbox_obj_list, ref_user, iou_filter_value):
+        items = []
+        iou_threshold = iou_filter_value / 10.0
+        for item in bbox_obj_list:
+            if item.user != ref_user:
+                #logging.info(f"iou = ref_user = {ref_user} list = {item.iou}")
+                if item.iou[ref_user] < iou_threshold: 
+                    items.append(item)
+        return items
 
     def update_stats(self):
         self.stats.image_list  = self.get_image_list()
@@ -70,6 +91,7 @@ class BboxList:
         self.stats.user_list   = self.stats.user_to_dir_map.keys()
         self.stats.dir_list    = self.stats.dir_to_user_map.keys()
         self.stats.image_to_class_map = self.get_image_to_class_map()
+        self.update_user_key_in_objects()
 
     def get_image_list(self):
         """
@@ -90,24 +112,48 @@ class BboxList:
         for obj in self.bbox_obj_list:
             dir.append(obj.dir)
         dir = sorted(set(dir))
+        user_to_dir_map = self.get_min_path_to_make_unique(dir)
 
-        user_to_dir_map = defaultdict(str)
         dir_to_user_map = defaultdict(str)
-        for d in dir:
-            tail = os.path.basename(d)
-            while user_to_dir_map[tail]:
-                tail += f"_{randint(0,9)}"
-            user_to_dir_map[tail] = d
-            dir_to_user_map[d] = tail
+        for user,d  in user_to_dir_map.items():
+            dir_to_user_map[d] = user
+
+        logging.info(f" map = {dir_to_user_map}")
         return user_to_dir_map, dir_to_user_map
 
+
+    def get_min_path_to_make_unique(self, dir):
+
+        # what is the longest number of paths in any dir?
+        max_dir_depth = 0
+        sep = os.path.sep
+        for d in dir:
+            if d.count(sep) > max_dir_depth:
+                max_dir_depth = d.count(sep)
+
+        # ok now count up to this limit to see if there are any duplicates
+        for i in range(1, max_dir_depth):
+            dir_map = defaultdict(lambda: 0)
+            for d in dir:
+                tail_list = d.split(sep)[-i:]
+                tail_str  = '_'.join(tail_list)
+                tail_srr  = tail_str.replace(" ", "_")
+                logging.info(f" trying {i} tail = {tail_str} for path = {d}")
+                dir_map[tail_str] = d
+            if len(dir_map) == len(dir):
+                return dir_map
+
+    def update_user_key_in_objects(self):
+        """
+        loop through all objects adding the user attribute
+        """
+        for obj in self.bbox_obj_list:
+            obj.user = self.stats.dir_to_user_map[obj.dir]
+
     def get_best_ref_user(self, image, class_base):
-        logging.info(f" golden_sir = {self.golden_dir}")
-        best_dir = self.golden_dir[image][class_base]
-        logging.info(f" best_dir = {best_dir} for {image} {class_base}")
-        logging.info(f" map = {self.stats.dir_to_user_map}")
-        best_user = self.stats.dir_to_user_map[best_dir]
-        return best_user
+        ref_user = self.stats.ref_user_map[image][class_base]
+        #logging.info(f" ref_user = {ref_user} for {image} {class_base}")
+        return ref_user
 
 
     def get_image_to_class_map(self):
@@ -165,37 +211,38 @@ class BboxList:
             min_obj = None
         else:
             min_dist = round(min_dist)
+            obj_src.has_associated_inner = True
 
         obj_src.meristem = min_obj
 
     def compute_iou_for_each_annotation(self):
         """
-        compute the iou of each outer against all other annotations of that same class
+        compute the iou of each class against one another
         """
 
-        # pass1 : select golden_dir based on image with most annotations for a class
-        # golden_dir[image][class_base]
+        # pass1 : select ref_user based on image with most annotations for a class
+        # ref_user[image][class_base]
 
         num_annotations  =  DeepDict(DeepDict(DeepDict(DeepDict((lambda: 0)))))
         max_annotation   =  DeepDict(DeepDict((lambda: 0)))
 
-        # pass1: for each image/class_base find num of annotations and record golden dir
+        # pass1: for each image/class_base find num of annotations and record ref_user
         for obj in self.bbox_obj_list:
-            num_annotations[obj.dir][obj.image][obj.class_base][obj.class_type] += 1
+            num_annotations[obj.user][obj.image][obj.class_base][obj.class_type] += 1
                 
-        for dir in num_annotations:
-            for image in num_annotations[dir]:
-                for class_base in num_annotations[dir][image]:
+        for user in num_annotations:
+            for image in num_annotations[user]:
+                for class_base in num_annotations[user][image]:
                     # count all class_types
                     n = 0
-                    for class_type in num_annotations[dir][image][class_base]:
-                        n +=  num_annotations[dir][image][class_base][class_type]
+                    for class_type in num_annotations[user][image][class_base]:
+                        n +=  num_annotations[user][image][class_base][class_type]
                     if n > max_annotation[image][class_base]:
                         max_annotation[image][class_base] = n
-                        self.golden_dir[image][class_base] = dir
-            logging.info(f"golden dir = {self.golden_dir}")
+                        self.stats.ref_user_map[image][class_base] = user
+            #logging.info(f"ref user= {self.stats.ref_user_map}")
 
-        # pass2: compute iou for each box relative to others
+        # pass2: compute iou for each box relative to all others
         for obj_src in self.bbox_obj_list:
 
             # not matching dir, but matching image/class
@@ -203,28 +250,28 @@ class BboxList:
                             image      = obj_src.image, 
                             class_base = obj_src.class_base,
                             class_type = obj_src.class_type)
-            for dir in self.stats.dir_list: 
-                if dir == obj_src.dir:
+            for user in self.stats.user_list: 
+                if user == obj_src.user:
                     continue
-                tgt_obj_list = self.filter(tgt_all_obj_list, dir = dir )
-                logging.info(f" checking dir filter for {dir} filter for list= {tgt_obj_list}")
-                user = self.stats.dir_to_user_map[dir]
+                tgt_obj_list = self.filter(tgt_all_obj_list, user = user )
+                logging.info(f" checking filter for {user} filter for list= {tgt_obj_list}")
                 obj_src.iou[user] = self.compute_iou_obj_list(obj_src, tgt_obj_list)
-            logging.info(f" iou for {obj_src} is {obj_src.iou}")
+            #logging.info(f" iou for {obj_src} is {obj_src.iou}")
 
 
     def compute_iou_obj_list(self, obj_src, tgt_obj_list):
         """
-        compute the intersection over union between obj_src and tgt_obj_list, returning the min value
+        compute the intersection over union between obj_src and tgt_obj_list, returning the max value
         """
-        iou_min = 0
-        logging.info(f"box_src={obj_src.bbox} bbox_list={tgt_obj_list}")
+        iou_max = 0
         for obj_tgt in tgt_obj_list:
             iou = self.compute_iou_bbox_pair(obj_src.bbox, obj_tgt.bbox)
-            if iou < iou_min:
-                iou_min = iou
+            if iou > iou_max:
+                iou_max = iou
 
-        return iou_min
+        iou_max = round(iou_max,2)
+        #logging.info(f"box_src={obj_src.bbox} bbox_list={tgt_obj_list} iou_max={iou_max}")
+        return iou_max
 
                         
 
@@ -236,7 +283,6 @@ class BboxList:
         if not bbox_tgt:
             return 0
 
-        logging.info(f"bbox_src={bbox_src} bbox_tgt={bbox_tgt}")
 
         xmin_src, ymin_src, xmax_src, ymax_src = bbox_src
         xmin_tgt, ymin_tgt, xmax_tgt, ymax_tgt = bbox_tgt
@@ -248,9 +294,32 @@ class BboxList:
         area_tgt = (xmax_tgt - xmin_tgt) * (ymax_tgt - ymin_tgt)
         union = area_src + area_tgt - intersection
 
-        return intersection / union
+        iou = intersection / float(union)
+        #logging.info(f"bbox_src={bbox_src} bbox_tgt={bbox_tgt} iou={intersection}/{union} = {iou}")
+
+        return iou
 
 
+    # ok, now for the higher order error detection
+    def locate_potential_mislabel(self):
 
+        # for any outer box with less than 0.3 score but would be 0.6 in another class
+        iou_threshold = {}
+        iou_threshold['same_class'] = 0.2 
+        iou_threshold['different_class'] = 0.5 
 
+        obj_list = self.filter(self.bbox_obj_list,  class_type = 'outer')
+
+        for image in self.stats.image_list:
+            obj_list_f = self.filter(obj_list,  image = image)
+            for obj in obj_list_f:
+                max_iou_same = max(obj.iou.values())
+                if max_iou_same < iou_threshold['same_class']:
+                    obj_list_f = self.rfilter(obj_list_f, class_base = obj.class_base)
+                    max_iou_diff = self.compute_iou_obj_list(obj, obj_list_f)
+                    if max_iou_diff > iou_threshold['different_class']:
+                        # potential mis-label!
+                        obj.warning = f"potential mis-label : same iou = {max_iou_same} but against another class iou = {max_iou_diff}"
+                        logging.info(obj.warning)
+            
     
