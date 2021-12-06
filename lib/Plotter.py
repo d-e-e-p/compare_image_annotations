@@ -264,6 +264,7 @@ image = {image_name} class = {cls}
         u_count =  defaultdict(lambda: 0)
         txt = self.get_text_for_report_line(max_username, 0, 0, u_count, max_username)
         cell_width, cell_height = img.textsize(txt, self.fnt)
+        max_txt_len = len(txt) # needed much later
 
         # ok, now compute total needed space based on that
         linespace = 1.5 * cell_height
@@ -300,23 +301,25 @@ image = {image_name} class = {cls}
                     userclass = f"{user}_{class_type}"
                     u_count[class_type] = dset.overlay_stats['userclass'][userclass]
 
-                logging.info(f"tats_count = {dset.overlay_stats['userclass']}")
-                logging.info(f"u_count = {u_count}")
+                #logging.info(f"tats_count = {dset.overlay_stats['userclass']}")
+                #logging.info(f"u_count = {u_count}")
                 txt = self.get_text_for_report_line(dset.ref_user, iou_min, iou_max, u_count, user)
+                logging.info(f"txt={txt}")
                 self.draw_box_text(img, txt, xloc, yloc, cell_width, cell_height, linespace, color, 1)
 
 
         # banner
         yloc -= linespace
-        txt = f"iou_min\tiou_max\t(out, in, inout) count\t user"
+        txt = f"iou_min iou_max (out, in, inout) count  user"
         txt = txt.expandtabs(4)
         color = 'white'
+        logging.info(f"txt={txt}")
         self.draw_box_text(img, txt, xloc, yloc, cell_width, cell_height, linespace, color, 1)
 
         yloc -= linespace
         txt = f"{dset.class_base} on {dset.image}"
-        right_edge = round(len(max_username) - len(txt)/2)
-        txt = txt.center(len(max_username))
+        txt = txt.center(max_txt_len).rstrip()
+        logging.info(f"txt={txt} max_username={max_username}")
         color = 'white'
         img.text((xloc,yloc), txt , font=self.fnt, fill=color)
 
@@ -337,8 +340,8 @@ image = {image_name} class = {cls}
             dset.overlay_stats['userclass'][userclass] += 1
 
             dset.overlay_stats['class_type'][obj.class_type] += 1
-            if obj.class_type == 'outer':
-                logging.info(f"count[{obj.class_type}] = {dset.overlay_stats['class_type'][obj.class_type]} bbox={obj.bbox}")
+            #if obj.class_type == 'outer':
+            #    logging.info(f"count[{obj.class_type}] = {dset.overlay_stats['class_type'][obj.class_type]} bbox={obj.bbox}")
 
             if obj.class_type == 'outer' and obj.has_associated_inner:
                 userclass = f"{obj.user}_inout"
@@ -394,6 +397,12 @@ image = {image_name} class = {cls}
                     txt = f"potential mis-label!\n{obj.warning}"
                     xloc, yloc = self.get_location_for_text(img, obj, txt)
                     img.text((xloc,yloc), txt , font=self.fnt, fill='red')
+
+                # inout # mark difficult objects
+                if obj.difficult:
+                    xloc, yloc = self.get_random_nearby_loc(obj.bbox);
+                    color = 'red'
+                    img.text((xloc, yloc), 'D' , font=self.fnt, fill=color)
 
 
         else:

@@ -23,7 +23,7 @@ from lib.Bbox    import BboxList
 from lib.Plotter import Plotter, DrawObject
 from lib.ColorScheme import ColorScheme
 
-from PyQt5.QtGui import QColor, QCursor, QImage, QImageReader, QPixmap
+from PyQt5.QtGui import QColor, QCursor, QImage, QImageReader, QPixmap, QPainter
 from PyQt5.QtCore import (QByteArray, QFileInfo, QPoint, QPointF, QProcess, QSize, QTimer, QVariant, Qt)
 from PyQt5.QtWidgets import (QAction, QApplication, QCheckBox, QDockWidget, QFileDialog,
                              QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
@@ -1224,9 +1224,26 @@ class MainWindow(QMainWindow, WindowMixin):
                 return False
             self.status("Loaded %s" % os.path.basename(unicode_file_path))
             logging.info(f"Loaded {os.path.basename(unicode_file_path)}")
+
+
+            # place self.image on using painter on new version with gutters
             self.image = image
+            new_width = self.image.width() + self.pl.margin_x
+            new_height = self.image.height() + self.pl.margin_y
+            image2 = image.scaled(new_width, new_height)
+            p= QPainter()
+            p.begin(image2)
+            p.drawImage(0, 0, image)
+            p.end()
+
+            # convert painter to qimage and set it to canvas
+            qimage = QImage(image2)
+            self.canvas.load_pixmap(QPixmap.fromImage(image2))
+            self.image = image2
+
+
             self.file_path = unicode_file_path
-            self.canvas.load_pixmap(QPixmap.fromImage(image))
+            #self.canvas.load_pixmap(QPixmap.fromImage(image))
             if self.label_file:
                 self.load_labels(self.label_file.shapes)
             self.set_clean()
