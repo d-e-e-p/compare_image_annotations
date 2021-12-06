@@ -23,6 +23,7 @@ class Settings(object):
 
     def save(self):
         if self.path:
+            print(f" saving window settings to {self.path}")
             with open(self.path, 'wb') as f:
                 pickle.dump(self.data, f, pickle.HIGHEST_PROTOCOL)
                 return True
@@ -31,6 +32,7 @@ class Settings(object):
     def load(self):
         try:
             if os.path.exists(self.path):
+                print(f" restoring window settings from {self.path}")
                 with open(self.path, 'rb') as f:
                     self.data = pickle.load(f)
                     return True
@@ -41,6 +43,6 @@ class Settings(object):
     def reset(self):
         if os.path.exists(self.path):
             os.remove(self.path)
-            print('Remove setting pkl file ${0}'.format(self.path))
+            print('Removed setting pkl file ${0}'.format(self.path))
         self.data = {}
         self.path = None

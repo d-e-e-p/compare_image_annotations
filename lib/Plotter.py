@@ -10,27 +10,30 @@ from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 from os.path import exists, join
 import logging
 import io
+import math
 from random import choice, randint
 
-from lib.Bbox   import Bbox
+from lib.Bbox   import Bbox, DeepDict
 from lib.Bbox   import BboxList
-from lib.ColorschemeTableau import ColorSchemeTableau
+from lib.ColorScheme import ColorScheme
 
 
 import pudb
 
 class DrawObject(object):
     def __init__(self, image, class_base, ref_user, visible_types, visible_users, iou_filter_value,
-            color_scheme, adjust_background, adjust_foreground):
+            color_pallet, adjust_background, adjust_foreground):
         self.image = image
         self.class_base = class_base
         self.ref_user = ref_user
         self.visible_types = visible_types
         self.visible_users = visible_users
         self.iou_filter_value = iou_filter_value
-        self.color_scheme  = color_scheme
+        self.color_pallet  = color_pallet
         self.adjust_background  = adjust_background
         self.adjust_foreground  = adjust_foreground
+        self.overlay_stats =  DeepDict(DeepDict((lambda: 0)))
+
 
     # yeah not reccomended but works in this case...
     def __eq__(self, other): 
@@ -46,7 +49,7 @@ class DrawObject(object):
 
 
     def __str__(self):
-        return f"i={self.image} c={self.class_base} ru={self.ref_user} vt={self.visible_types} vu={self.visible_users} cs={self.color_scheme} ab={self.adjust_background} af={self.adjust_foreground}"
+        return f"i={self.image} c={self.class_base} ru={self.ref_user} vt={self.visible_types} vu={self.visible_users} cs={self.color_pallet} ab={self.adjust_background} af={self.adjust_foreground}"
 
 class Plotter:
     def __init__(self, bbl, img_dir, out_dir):
@@ -54,7 +57,8 @@ class Plotter:
         self.bbl = bbl
         self.margin_x = 100
         self.margin_y = 200
-        self.color_scheme  = 'Tableau10'
+        self.color_scheme  = ColorScheme()
+        self.color_pallet  = "Bold" # initial pallet
         self.user_to_color = {}
         self.source_img = defaultdict(lambda: None)
         self.img_list = bbl.get_image_list();
@@ -104,11 +108,12 @@ class Plotter:
 
     def assign_colors_to_users(self):
 
-        logging.info(f" - color_scheme = {self.color_scheme}") 
-        c = ColorSchemeTableau()
-        color_list = c.get_colors_list(self.color_scheme)
+        logging.info(f" - color_pallet = {self.color_pallet}") 
+        num_users = len(self.bbl.stats.user_list)
+        color_list = self.color_scheme.get_colors_for_pallet(self.color_pallet, num_users)
         logging.info(f" color_list = {color_list}")
 
+        # cycle thru color_list is num_users > color_list
         i = 0
         for user in self.bbl.stats.user_list:
             self.user_to_color[user] = color_list[i]
@@ -170,14 +175,17 @@ image = {image_name} class = {cls}
         # what's the size of thie image?
         width, height = self.source_img[dset.image].size
         imgobj = Image.new('RGBA', (width, height), (255, 0, 0, 0))
-
-        #imgobj = self.source_img[dset.image].copy()
-        #factor =  (dset.adjust_background / 10) + 0.5
-        #enhancer = ImageEnhance.Brightness(imgobj)
-        #imgobj = enhancer.enhance(factor)
-
-
+        # pad with margin
+        #imgobj = self.add_margin(imgobj,0,0,self.margin_y,0,(1, 1, 1))
         img = ImageDraw.Draw(imgobj)
+
+        # draw a black rectangle on gutters
+        bbox = [0, height - self.margin_y, width, height]
+        img.rectangle(bbox, fill='black', outline='white', width=1)
+
+        bbox = [width - self.margin_x, height - self.margin_y , width, 0]
+        img.rectangle(bbox, fill='black', outline='white', width=1)
+
 
         # first filter based on matching image/class
         filter_criteria = {}
@@ -193,23 +201,28 @@ image = {image_name} class = {cls}
             obj_list = self.bbl.filter_by_iou_value(obj_list, dset.ref_user,  dset.iou_filter_value)
 
 
-        # ok now update color scheme
-        if self.color_scheme != dset.color_scheme:
-            self.color_scheme = dset.color_scheme
+        # ok now update color pallet
+        if self.color_pallet != dset.color_pallet:
+            self.color_pallet = dset.color_pallet
             self.assign_colors_to_users()
+
+        # reset stats
+        dset.overlay_stats['outer_assoc']['associated'] = 0
+        dset.overlay_stats['outer_assoc']['not_associated'] = 0
         
-        # handle the 3 cases : inout just needs outer objects for now
-        if dset.visible_types['outer']:
-            obj_list_f = self.bbl.filter(obj_list, class_type = 'outer')
-            self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, "outer")
+        # handle the 3 class_type
+        for class_type in self.bbl.stats.class_type_list:
+            if class_type == 'inout':
+                continue
+            obj_list_f = self.bbl.filter(obj_list, class_type = class_type)
+            self.collect_overlay_stats(dset, obj_list_f)
+            if dset.visible_types[class_type]:
+                self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, class_type)
 
-        if dset.visible_types['inout']:
-            obj_list_f = self.bbl.filter(obj_list, has_associated_inner = True)
-            self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, "inout")
 
-        if dset.visible_types['inner']:
-            obj_list_f = self.bbl.filter(obj_list, class_type = 'meristem')
-            self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, "inner")
+
+        # draw a key on top left
+        self.draw_legend_for_overlay(img, dset)
 
         # factor : 0.5 darkens to 1.5 lightens:  adjust_foreground is from 0 to 10
         # map a number from 0 to 10 to 0.5 to 1.5
@@ -221,6 +234,143 @@ image = {image_name} class = {cls}
         imgobj.save(bytes_img, format='PNG')
         return bytes_img.getvalue()
 
+    def get_text_for_report_line(self, ref_user, iou_min, iou_max, u_count, user):
+
+        txt = f" {iou_min:.2f}\t{iou_max:.2f}\t"
+        for class_type in self.bbl.stats.class_type_list:
+            txt += f"{u_count[class_type]}\t"
+        txt += f"{user}"
+        txt = txt.replace("-inf"," -  ")
+        txt = txt.replace("inf", " -  ")
+        txt = txt.expandtabs(4)
+        if user == ref_user:
+            txt += " <--REF"
+        return txt
+
+    def draw_box_text(self, img, txt, xloc, yloc, cell_width, cell_height, linespace, color, width):
+        img.text((xloc,yloc), txt , font=self.fnt, fill=color)
+        yloc -= (linespace - cell_height)/2
+        bbox = [xloc, yloc, xloc + cell_width, yloc + linespace]
+        img.rounded_rectangle(bbox, radius=2, fill=None, outline=color, width=width)
+
+    def draw_legend_for_overlay(self, img, dset):
+        """
+        some stuff to docorate the picture
+        """
+        width, height = self.source_img[dset.image].size
+
+        # find longest name user and assume user is ref
+        max_username = max(dset.visible_users.keys())
+        u_count =  defaultdict(lambda: 0)
+        txt = self.get_text_for_report_line(max_username, 0, 0, u_count, max_username)
+        cell_width, cell_height = img.textsize(txt, self.fnt)
+
+        # ok, now compute total needed space based on that
+        linespace = 1.5 * cell_height
+
+        num_visible_users = sum(dset.visible_users.values())
+        nun_lines_extra = 2
+        num_lines = num_visible_users + nun_lines_extra
+
+        xspace_needed = cell_width
+        yspace_needed = num_lines * linespace
+
+        xloc = width - xspace_needed - self.margin_x / 2
+        yloc = height - cell_height
+
+        # center  
+
+        txt  = f"Associated outer = {dset.overlay_stats['outer_assoc']['associated']}  "
+        txt +=   f"Floating outer = {dset.overlay_stats['outer_assoc']['not_associated']}  "
+        color = 'white'
+        img.text((xloc,yloc), txt , font=self.fnt, fill=color)
+        yloc -= linespace
+
+        # bottom up
+        v_users = sorted(dset.visible_users.keys(), reverse=True)
+        for user in v_users:
+            if dset.visible_users[user]:
+                yloc -= linespace
+                color = self.user_to_color[user]
+
+                iou_min = dset.overlay_stats['iou_min'][user]
+                iou_max = dset.overlay_stats['iou_max'][user]
+                u_count =  defaultdict(lambda: 0)
+                for class_type in self.bbl.stats.class_type_list:
+                    userclass = f"{user}_{class_type}"
+                    u_count[class_type] = dset.overlay_stats['userclass'][userclass]
+
+                logging.info(f"tats_count = {dset.overlay_stats['userclass']}")
+                logging.info(f"u_count = {u_count}")
+                txt = self.get_text_for_report_line(dset.ref_user, iou_min, iou_max, u_count, user)
+                self.draw_box_text(img, txt, xloc, yloc, cell_width, cell_height, linespace, color, 1)
+
+
+        # banner
+        yloc -= linespace
+        txt = f"iou_min\tiou_max\t(out, in, inout) count\t user"
+        txt = txt.expandtabs(4)
+        color = 'white'
+        self.draw_box_text(img, txt, xloc, yloc, cell_width, cell_height, linespace, color, 1)
+
+        yloc -= linespace
+        txt = f"{dset.class_base} on {dset.image}"
+        right_edge = round(len(max_username) - len(txt)/2)
+        txt = txt.center(len(max_username))
+        color = 'white'
+        img.text((xloc,yloc), txt , font=self.fnt, fill=color)
+
+
+
+
+
+
+    # look thru boxes counting user/type stats
+    def collect_overlay_stats(self, dset, obj_list):
+
+
+        for obj in obj_list:
+            # fist mark class_types
+            userclass = f"{obj.user}_{obj.class_type}"
+            dset.overlay_stats['userclass'][userclass] += 1
+            userclass = f"{obj.user}_total"
+            dset.overlay_stats['userclass'][userclass] += 1
+
+            dset.overlay_stats['class_type'][obj.class_type] += 1
+            if obj.class_type == 'outer':
+                logging.info(f"count[{obj.class_type}] = {dset.overlay_stats['class_type'][obj.class_type]} bbox={obj.bbox}")
+
+            if obj.class_type == 'outer' and obj.has_associated_inner:
+                userclass = f"{obj.user}_inout"
+                dset.overlay_stats['userclass'][userclass] += 1
+                dset.overlay_stats['class_type']['inout'] += 1
+            
+            if obj.class_type == 'outer':
+                if obj.has_associated_inner:
+                    dset.overlay_stats['outer_assoc']['associated'] += 1
+                else:
+                    dset.overlay_stats['outer_assoc']['not_associated'] += 1
+
+        # reset from default 0 to inf
+        for user in self.bbl.stats.user_list:
+            dset.overlay_stats['iou_min'][user] = math.inf
+            dset.overlay_stats['iou_max'][user] = -math.inf
+
+        # get iou stats
+        for obj in obj_list:
+            user = obj.user
+            if user != dset.ref_user:
+                iou_value = obj.iou[dset.ref_user]
+                if iou_value > dset.overlay_stats['iou_max'][user] :
+                    dset.overlay_stats['iou_max'][user] = iou_value
+                if iou_value < dset.overlay_stats['iou_min'][user] :
+                    dset.overlay_stats['iou_min'][user] = iou_value
+                #logging.info(f" iou[{dset.ref_user}] for {user} = {iou_value} min={ dset.overlay_stats['iou_min'][user]} max={dset.overlay_stats['iou_max'][user]}")
+
+        logging.info(f" stats = {dset.overlay_stats}")
+        #import pdb; pdb.set_trace()
+
+                    
 
     def draw_boxes_for_object(self, img, obj_list, ref_user, type):
 
@@ -242,15 +392,9 @@ image = {image_name} class = {cls}
                 img.text((xloc,yloc), txt , font=self.fnt, fill=color)
                 if obj.warning is not None:
                     txt = f"potential mis-label!\n{obj.warning}"
-                    width, height = self.source_img[obj.image].size
-                    textwidth, textheight = img.textsize(txt, self.fnt)
-                    # correct loc is if off screen
-                    xloc, yloc = self.get_random_nearby_loc(obj.bbox);
-                    if xloc + textwidth > width:
-                        xloc = width - textwidth
-                    if yloc + textheight > height:
-                        yloc = height - textheight
+                    xloc, yloc = self.get_location_for_text(img, obj, txt)
                     img.text((xloc,yloc), txt , font=self.fnt, fill='red')
+
 
         else:
             for obj in obj_list:
@@ -265,6 +409,23 @@ image = {image_name} class = {cls}
                     shape = [(x2i, y2i), (x2o, y2o)] ; img.line(shape, fill=color, width = 3)
                     shape = [(x2i, y1i), (x2o, y1o)] ; img.line(shape, fill=color, width = 3)
 
+
+    def get_location_for_text(self, img, obj, txt):
+        """
+        center text first, and then adjust of off screen
+        """
+        x1, y1, x2, y2 = obj.bbox
+        xloc = (x1+x2) / 2
+        yloc = (y1+y2) / 2
+        width, height = self.source_img[obj.image].size
+        textwidth, textheight = img.textsize(txt, self.fnt)
+        xloc -= round(textwidth / 2)
+        yloc -= round(textheight / 2)
+        if xloc + textwidth > width:
+            xloc = width - textwidth
+        if yloc + textheight > height:
+            yloc = height - textheight
+        return xloc, yloc
 
     def get_random_nearby_loc(self, bbox):
         """
@@ -282,7 +443,7 @@ image = {image_name} class = {cls}
     # from https://note.nkmk.me/en/python-pillow-add-margin-expand-canvas/
     @staticmethod
     def add_margin(pil_img, top, right, bottom, left, color):
-        logging.info(f" pil = {pil_img}")
+        #logging.info(f" pil = {pil_img}")
         width, height = pil_img.size
         new_width = width + right + left
         new_height = height + top + bottom

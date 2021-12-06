@@ -36,6 +36,7 @@ class Stats:
         self.image_list =  []
         self.user_list  =  []
         self.dir_list   =  []
+        self.class_type_list    = "outer inner inout".split()
         self.user_to_dir_map    = defaultdict(str)
         self.dir_to_user_map    = defaultdict(str)
         self.image_to_class_map = defaultdict(list)
@@ -139,7 +140,7 @@ class BboxList:
                 tail_list = d.split('/')[-i:]
                 tail_str  = '_'.join(tail_list)
                 tail_srr  = tail_str.replace(" ", "_")
-                logging.info(f" trying {i} tail = {tail_str} for path = {d}")
+                #logging.info(f" trying {i} tail = {tail_str} for path = {d}")
                 dir_map[tail_str] = d
             if len(dir_map) == len(dir):
                 return dir_map
@@ -177,12 +178,12 @@ class BboxList:
         """
         for obj in self.bbox_obj_list:
             if obj.class_type == 'outer':
-                logging.info(f"box is outer = {obj}")
+                #logging.info(f"box is outer = {obj}")
                 inner_obj_list = self.filter(self.bbox_obj_list, 
                         dir        = obj.dir,
                         image      = obj.image, 
                         class_base = obj.class_base,
-                        class_type = 'meristem')
+                        class_type = 'inner')
                 self.compute_center(obj, inner_obj_list)
 
 
@@ -208,7 +209,7 @@ class BboxList:
                     min_obj  = obj
 
         if min_dist == math.inf:
-            logging.info(f"WARNING: no meristem found for {obj_src.bbox}")
+            #logging.info(f"WARNING: no meristem found for {obj_src.bbox}")
             min_obj = None
         else:
             min_dist = round(min_dist)
@@ -323,7 +324,7 @@ class BboxList:
                     max_iou_diff, max_iou_userclass = self.compute_iou_obj_list(obj, obj_list_f)
                     if max_iou_diff > iou_threshold['diff_class']:
                         # potential mis-label!
-                        obj.warning = f"\n{obj.class_base} by {obj.user}\n{max_iou_userclass}"
+                        obj.warning = f"{obj.class_base} by {obj.user}\n{max_iou_userclass}"
                         logging.info(obj.warning)
             
     

@@ -75,13 +75,19 @@ def main():
         return err
 
     bbl = BboxList()
+    print("    0 Loading xml:")
     Parser(bbl, args.xml)
     logging.info(bbl)
     bbl.update_stats()
+    print("    1 associating outer with meristem")
     bbl.associate_stem_with_outer()
+    print("    2 computing IOU")
     bbl.compute_iou_for_each_annotation()
+    print("    3 finding potential mis-labels")
     bbl.locate_potential_mislabel()
+    print("    4 saving report plots")
     pl = Plotter(bbl, args.img, args.out)
+    print("    5 loading gui")
 
     app, _win = run_main_gui(bbl, pl, args.img, args.out)
     return app.exec_()

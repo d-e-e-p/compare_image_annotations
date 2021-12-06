@@ -22,7 +22,8 @@ class Parser:
         xml_ext = ".xml"
         for path in xml_path:
             for xml in glob(os.path.join(path, '*' + xml_ext)):
-                logging.info(f"-> parsing xml file: {xml}")
+                #logging.info(f"-> parsing xml file: {xml}")
+                print(f"    -> loading xml file: {xml}")
                 bbl.bbox_obj_list.extend(self.parse_xml_file(path, xml))
 
 
@@ -80,14 +81,18 @@ class Parser:
             ymax = int(bbox.find('ymax').text)
 
             # carrot_outer -> carrot , outer
-            class_base, class_type = class_name.rsplit('_', 1)
-            if class_type == 'outer' or class_type == 'meristem':     
+            class_base, class_type_name = class_name.rsplit('_', 1)
+            if class_type_name != 'outer' and class_type_name != 'meristem':     
+                logging.error(f"ERROR: class name should end in _outer or _meristem: {class_name}")
+                logging.error(f"ERROR: look at file: {file}")
+            else:
+                class_type = class_type_name
+                if class_type_name == "meristem":
+                    class_type = "inner"
+
                 bbox = Bbox(dir, file, image,  class_base, class_type, difficult, [xmin, ymin, xmax, ymax])
                 bbox_list.append(bbox)
 
-            else:
-                print(f"ERROR: class name should end in _outer or _meristem: {class_name}")
-                print(f"ERROR: look at file: {file}")
         return bbox_list
 
     

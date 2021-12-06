@@ -21,7 +21,7 @@ from collections import defaultdict
 from lib.Bbox    import Bbox
 from lib.Bbox    import BboxList
 from lib.Plotter import Plotter, DrawObject
-from lib.ColorschemeTableau import ColorSchemeTableau
+from lib.ColorScheme import ColorScheme
 
 from PyQt5.QtGui import QColor, QCursor, QImage, QImageReader, QPixmap
 from PyQt5.QtCore import (QByteArray, QFileInfo, QPoint, QPointF, QProcess, QSize, QTimer, QVariant, Qt)
@@ -120,12 +120,13 @@ class MainWindow(QMainWindow, WindowMixin):
         self.last_open_dir = None
         self.cur_img_idx = 0
         self.img_count = len(self.m_img_list)
-        self.color_scheme = None
+        self.color_pallet = self.pl.color_pallet
         self.adjust_foreground =  5     # brightness
         self.adjust_background = 10     # transparency
 
         # record image to path (assume unique names!)
         self.image_basename_to_path = defaultdict(str)
+        self.path_to_image_basename = defaultdict(str)
 
         # Whether we need to save or not.
         self.dirty = False
@@ -148,7 +149,7 @@ class MainWindow(QMainWindow, WindowMixin):
         list_layout.setContentsMargins(0, 0, 0, 0)
 
         self.class_type_button = {}
-        for class_type in "outer inner inout".split():
+        for class_type in self.bbl.stats.class_type_list:
             self.class_type_button[class_type] = QCheckBox(get_str(class_type))
             if class_type == "inout":
                 self.class_type_button[class_type].setChecked(False)
@@ -166,6 +167,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.user_button[user].stateChanged.connect(self.draw_iou_boxes)
             list_layout.addWidget(self.user_button[user])
 
+        #import pdb; pdb.set_trace()
         list_layout.addSpacing(10)
 
         iouLabel = QLabel("IOU Filter")
@@ -182,18 +184,17 @@ class MainWindow(QMainWindow, WindowMixin):
         # color selection
         list_layout.addSpacing(20)
 
-        colorLabel = QLabel("Color Scheme:")
+        colorLabel = QLabel("Color Pallet:")
         colorLabel.setAlignment(Qt.AlignCenter)
         list_layout.addWidget(colorLabel)
 
         self.colorBox = QComboBox()
-        self.set_color_scheme_options(self.colorBox)
-        self.colorBox.currentIndexChanged.connect(self.color_scheme_changed)
-        self.colorBox.setCurrentIndex(0)
+        self.set_color_pallet_options(self.colorBox)
+        self.colorBox.currentIndexChanged.connect(self.color_pallet_changed)
         list_layout.addWidget(self.colorBox)
 
         # slider for background and foreground
-        backgroundLabel = QLabel("background opacity")
+        backgroundLabel = QLabel("Background Opacity")
         backgroundLabel.setAlignment(Qt.AlignCenter)
         list_layout.addWidget(backgroundLabel)
 
@@ -204,7 +205,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.colorBackgroundSlider.valueChanged.connect(self.adjust_background_changed)
         list_layout.addWidget(self.colorBackgroundSlider)
 
-        foregroundLabel = QLabel("annotation dark -> light")
+        foregroundLabel = QLabel("Annotation Darkness")
         foregroundLabel.setAlignment(Qt.AlignCenter)
         list_layout.addWidget(foregroundLabel)
 
@@ -263,8 +264,8 @@ class MainWindow(QMainWindow, WindowMixin):
         file_list_layout.addWidget(self.file_list_widget)
         file_list_layout.setAlignment(Qt.AlignCenter)
 
-        self.file_list_widget.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.file_list_widget.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        #self.file_list_widget.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        #self.file_list_widget.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         #list = self.file_list_widget
         #self.file_list_widget.setFixedSize(\
         #    list.sizeHintForColumn(0) + 2 * list.frameWidth(), list.sizeHintForRow(0) * list.count() + 2 * list.frameWidth())
@@ -297,7 +298,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.staff_buttons = {}
         for user in self.bbl.stats.user_list:
             self.staff_buttons[user] = QRadioButton(user)
-            #self.staff_buttons[user].toggled.connect(partial(self.staff_button_toggled, user))
+            self.staff_buttons[user].toggled.connect(partial(self.staff_button_toggled, user))
             self.staff_box_widget.addWidget(self.staff_buttons[user])
 
         staff_list_container = QWidget()
@@ -396,6 +397,7 @@ class MainWindow(QMainWindow, WindowMixin):
         delete_image = action(get_str('deleteImg'), self.delete_image, 'Ctrl+Shift+D', 'close', get_str('deleteImgDetail'))
 
         reset_all = action(get_str('resetAll'), self.reset_all, None, 'resetall', get_str('resetAllDetail'))
+        reset_quit = action('reset and quit', self.reset_quit, None, 'resetall', get_str('resetAllDetail'))
 
         color1 = action(get_str('boxLineColor'), self.choose_color1,
                         'Ctrl+L', 'color_line', get_str('boxLineColorDetail'))
@@ -522,8 +524,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.display_label_option.setChecked(settings.get(SETTING_PAINT_LABEL, False))
         self.display_label_option.triggered.connect(self.toggle_paint_labels_option)
 
-        add_actions(self.menus.file,
-                    (open, open_dir, change_save_dir, open_annotation, copy_prev_bounding, self.menus.recentFiles, save, save_format, save_as, close, reset_all, delete_image, quit))
+        # only add a fre actions
+        add_actions(self.menus.file, (reset_quit, quit))
         add_actions(self.menus.help, (help_default, show_info, show_shortcut))
         add_actions(self.menus.view, (
             self.auto_saving,
@@ -544,7 +546,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.tools = self.toolbar('Tools')
         self.actions.beginner = (
-            open, open_dir, change_save_dir, open_next_image, open_prev_image, verify, save, save_format, None, create, copy, delete, None,
+            open_dir, change_save_dir, open_next_image, open_prev_image, verify, save, save_format, None, create, copy, delete, None,
             zoom_in, zoom, zoom_out, fit_window, fit_width)
 
         self.actions.beginner = (
@@ -633,8 +635,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.statusBar().addPermanentWidget(self.label_coordinates)
 
         # Open Dir if default file
-        if self.file_path and os.path.isdir(self.file_path):
-            self.open_dir_dialog(dir_path=self.file_path, silent=True)
+        #if self.file_path and os.path.isdir(self.file_path):
+        #    self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
@@ -863,7 +865,10 @@ class MainWindow(QMainWindow, WindowMixin):
 
     # Tzutalin 20160906 : Add file list and dock to move faster
     def file_item_double_clicked(self, item=None):
-        imgPath = self.image_basename_to_path[item.text()]
+        imgName = item.text()
+        imgPath = self.image_basename_to_path[imgName]
+        logging.info(f"loading image {self.cur_img_idx} :  {imgName} from {imgPath}")
+        # TODO: remove index scheme of tracking files
         self.cur_img_idx = self.m_img_list.index(ustr(imgPath))
         filename = self.m_img_list[self.cur_img_idx]
         if filename:
@@ -1422,19 +1427,23 @@ class MainWindow(QMainWindow, WindowMixin):
         self.dir_name = dir_path
         self.file_path = None
         self.file_list_widget.clear()
-        self.m_img_list = self.scan_all_images(dir_path)
-        self.img_count = len(self.m_img_list)
-        self.open_next_image()
-        for imgPath in self.m_img_list:
-            # TODO: make sure this is unique
+
+        files_in_dir = self.scan_all_images(dir_path)
+        for imgPath in files_in_dir:
             imgName = Path(imgPath).stem
-            # only load images with annotations!
             if self.bbl.stats.image_to_class_map[imgName]:
                 self.image_basename_to_path[imgName] = imgPath
-                item = QListWidgetItem(imgName)
-                self.file_list_widget.addItem(item)
-        # unrelated but this is a good time to load list of users 
-        #self.update_combo_box()
+                self.path_to_image_basename[imgPath] = imgName
+        logging.info(f"self.image_basename_to_path = {self.image_basename_to_path}")
+
+        self.m_img_list = list(self.image_basename_to_path.values())
+        self.img_count = len(self.m_img_list)
+        logging.info(f"self.m_img_list = {self.m_img_list}")
+        self.open_next_image()
+        for imgPath in self.m_img_list:
+            imgName = self.path_to_image_basename[imgPath]
+            item = QListWidgetItem(imgName)
+            self.file_list_widget.addItem(item)
 
 
     def verify_image(self, _value=False):
@@ -1575,6 +1584,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.saveAs.setEnabled(False)
 
     def delete_image(self):
+        return
         delete_path = self.file_path
         if delete_path is not None:
             self.open_next_image()
@@ -1589,6 +1599,12 @@ class MainWindow(QMainWindow, WindowMixin):
         self.close()
         process = QProcess()
         process.startDetached(os.path.abspath(__file__))
+
+    def reset_quit(self):
+        self.settings.reset()
+        self.close()
+        #process = QProcess()
+        #process.startDetached(os.path.abspath(__file__))
 
     def may_continue(self):
         if not self.dirty:
@@ -1741,7 +1757,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # ok now set a reference user if nobody is defined
         if not self.ref_user:
             self.ref_user = self.bbl.get_best_ref_user(imgName, class_list[0])
-            self.staff_buttons[self.ref_user].setToolTip(f"{self.ref_user} has the most annotations for this image")
+            #self.staff_buttons[self.ref_user].setToolTip(f"{self.ref_user} has the most annotations for this image")
             self.staff_buttons[self.ref_user].setChecked(True)
             logging.info(f"user = {self.ref_user} button status = {self.staff_buttons[self.ref_user].isChecked()}")
 
@@ -1754,11 +1770,11 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     # trigger update on new color scheme
-    def color_scheme_changed(self):
+    def color_pallet_changed(self):
         # get color scheme from combo box
         txt = self.colorBox.currentText()
-        if self.color_scheme != txt:
-            self.color_scheme = txt
+        if self.color_pallet != txt:
+            self.color_pallet = txt
             self.draw_iou_boxes()
 
     def adjust_background_changed(self):
@@ -1775,13 +1791,16 @@ class MainWindow(QMainWindow, WindowMixin):
             self.adjust_foreground = value
             self.draw_iou_boxes()
 
-    def set_color_scheme_options(self, widget):
-        c = ColorSchemeTableau()
-        scheme_list = c.get_color_schemes()
-        for scheme in scheme_list:
-            widget.addItem(scheme)
-        # set default initially to first item
-        self.color_scheme = widget.itemText(0)
+    def set_color_pallet_options(self, widget):
+        # set the options and also set default
+        c = ColorScheme()
+        pallet_list = c.get_list_of_palletnames()
+        index = 0
+        for palletname in pallet_list:
+            widget.addItem(palletname)
+            if palletname == self.color_pallet:
+                self.colorBox.setCurrentIndex(index)
+            index += 1
 
 
     def btnstate(self, state):
@@ -1817,15 +1836,16 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # class type
         visible_types = {}
-        for class_type in "outer inner inout".split():
+        for class_type in self.bbl.stats.class_type_list:
             visible_types[class_type] = self.class_type_button[class_type].isChecked()
 
         dobj = DrawObject(image, class_base, self.ref_user, visible_types, visible_users, self.iou_filter_value,
-                        self.color_scheme , self.adjust_background, self.adjust_foreground,)
+                        self.color_pallet , self.adjust_background, self.adjust_foreground,)
         if dobj != self.current_draw_object:
             self.current_draw_object = dobj
             logging.info(f"draw: new draw object {dobj}")
             self.draw_overlay_on_canvas()
+            self.update_widgets_with_overlay_stats()
         else:
             logging.info(f"draw: nothing to do : same settings {dobj}")
 
@@ -1840,6 +1860,20 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.load_overlay(pm, self.adjust_background)
 
 
+    def update_widgets_with_overlay_stats(self):
+        """
+        map of counts...
+        """
+        overlay_stats = self.current_draw_object.overlay_stats
+        for user in self.bbl.stats.user_list:
+            userclass = f"{user}_total"
+            count = overlay_stats['userclass'][userclass]
+            self.user_button[user].setText(f"[{count:2d}] {user}")
+
+        get_str = lambda str_id: self.string_bundle.get_string(str_id)
+        for class_type in self.bbl.stats.class_type_list:
+            count = overlay_stats['class_type'][class_type]
+            self.class_type_button[class_type].setText(f"[{count}] {get_str(class_type)}")
             
 
     def staff_button_toggled(self, user):       
@@ -1871,13 +1905,13 @@ def run_main_gui(bbl, pl, image_dir, save_dir):
     app = QApplication(argv)
     app.setApplicationName(__appname__)
     app.setWindowIcon(new_icon("app"))
+    app.setStyle('Fusion')
 
     # Usage : labelImg.py image classFile saveDir
     logging.info(f" image dir: {image_dir}")
     logging.info(f" save  dir: {save_dir}")
     win = MainWindow(bbl, pl, image_dir, save_dir)
     win.show()
-    #win.import_dir_images("demo")
     return app, win
 
 

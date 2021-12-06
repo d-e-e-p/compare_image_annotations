@@ -500,7 +500,8 @@ class Canvas(QWidget):
         p.setBackground(QColor("black"))
         p.setBackgroundMode(Qt.TransparentMode)
         p.setBrush(QBrush(Qt.black, Qt.SolidPattern))
-        p.drawRect(0,0, self.pixmap.width(), self.pixmap.height())
+        #p.drawRect(0,0, self.pixmap.width(), self.pixmap.height())
+        p.drawRect(0,0, self.overlay.width(), self.overlay.height())
         p.setOpacity(self.adjust_background / 10.0)
         p.drawPixmap(0, 0, self.pixmap)
         p.setOpacity(1) # opaque
