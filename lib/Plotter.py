@@ -210,19 +210,24 @@ image = {image_name} class = {cls}
         dset.overlay_stats['outer_assoc']['associated'] = 0
         dset.overlay_stats['outer_assoc']['not_associated'] = 0
         
-        # handle the 3 class_type
+        # handle the 3 class_type: outer inner inout
         for class_type in self.bbl.stats.class_type_list:
             if class_type == 'inout':
                 continue
+
             obj_list_f = self.bbl.filter(obj_list, class_type = class_type)
             self.collect_overlay_stats(dset, obj_list_f)
             if dset.visible_types[class_type]:
                 self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, class_type)
-
+            # handle inout class type on 'outer' loop
+            if class_type == 'outer' and dset.visible_types['inout']:
+                self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, 'inout')
+        
 
 
         # draw a key on top left
-        self.draw_legend_for_overlay(img, dset)
+        self.draw_left_legend_for_overlay(img, dset)
+        self.draw_right_legend_for_overlay(img, dset)
 
         # factor : 0.5 darkens to 1.5 lightens:  adjust_foreground is from 0 to 10
         # map a number from 0 to 10 to 0.5 to 1.5
@@ -253,9 +258,9 @@ image = {image_name} class = {cls}
         bbox = [xloc, yloc, xloc + cell_width, yloc + linespace]
         img.rounded_rectangle(bbox, radius=2, fill=None, outline=color, width=width)
 
-    def draw_legend_for_overlay(self, img, dset):
+    def draw_right_legend_for_overlay(self, img, dset):
         """
-        some stuff to docorate the picture
+        a table of shown values
         """
         width, height = self.source_img[dset.image].size
 
@@ -279,13 +284,6 @@ image = {image_name} class = {cls}
         xloc = width - xspace_needed - self.margin_x / 2
         yloc = height - cell_height
 
-        # center  
-
-        txt  = f"Associated outer = {dset.overlay_stats['outer_assoc']['associated']}  "
-        txt +=   f"Floating outer = {dset.overlay_stats['outer_assoc']['not_associated']}  "
-        color = 'white'
-        img.text((xloc,yloc), txt , font=self.fnt, fill=color)
-        yloc -= linespace
 
         # bottom up
         v_users = sorted(dset.visible_users.keys(), reverse=True)
@@ -316,14 +314,28 @@ image = {image_name} class = {cls}
         logging.info(f"txt={txt}")
         self.draw_box_text(img, txt, xloc, yloc, cell_width, cell_height, linespace, color, 1)
 
-        yloc -= linespace
-        txt = f"{dset.class_base} on {dset.image}"
-        txt = txt.center(max_txt_len).rstrip()
-        logging.info(f"txt={txt} max_username={max_username}")
+
+
+    def draw_left_legend_for_overlay(self, img, dset):
+        """
+        tile and stuff
+        """
+        width, height = self.source_img[dset.image].size
+        xloc = 100
+        yloc = height - self.margin_y 
+        header_txt = f"{dset.class_base} on {dset.image}"
+        underline_txt = '-' * len(header_txt)
+
+
+        txt = f"""
+
+    {header_txt}
+    {underline_txt}
+      Associated outer = {dset.overlay_stats['outer_assoc']['associated']}  
+      Floating outer   = {dset.overlay_stats['outer_assoc']['not_associated']}  
+"""
         color = 'white'
-        img.text((xloc,yloc), txt , font=self.fnt, fill=color)
-
-
+        img.multiline_text((xloc,yloc), txt , font=self.fnt, fill=color)
 
 
 
@@ -343,6 +355,7 @@ image = {image_name} class = {cls}
             #if obj.class_type == 'outer':
             #    logging.info(f"count[{obj.class_type}] = {dset.overlay_stats['class_type'][obj.class_type]} bbox={obj.bbox}")
 
+            # handle inout case when called as outer
             if obj.class_type == 'outer' and obj.has_associated_inner:
                 userclass = f"{obj.user}_inout"
                 dset.overlay_stats['userclass'][userclass] += 1
@@ -404,19 +417,21 @@ image = {image_name} class = {cls}
                     color = 'red'
                     img.text((xloc, yloc), 'D' , font=self.fnt, fill=color)
 
-
+        # ok now handle the inout case
         else:
+            logging.info(f" handling 'inout' case")
             for obj in obj_list:
-                if obj.meristem is not None:
+                if obj.has_associated_inner :
+
                     color = self.user_to_color[obj.user]
 
                     # draw connector from stem to outer
                     x1o, y1o, x2o, y2o = obj.bbox
                     x1i, y1i, x2i, y2i = obj.meristem.bbox
-                    shape = [(x1i, y1i), (x1o, y1o)] ; img.line(shape, fill=color, width = 3)
-                    shape = [(x1i, y2i), (x1o, y2o)] ; img.line(shape, fill=color, width = 3)
-                    shape = [(x2i, y2i), (x2o, y2o)] ; img.line(shape, fill=color, width = 3)
-                    shape = [(x2i, y1i), (x2o, y1o)] ; img.line(shape, fill=color, width = 3)
+                    shape = [(x1i, y1i), (x1o, y1o)] ; img.line(shape, fill=color, width = 2)
+                    shape = [(x1i, y2i), (x1o, y2o)] ; img.line(shape, fill=color, width = 2)
+                    shape = [(x2i, y2i), (x2o, y2o)] ; img.line(shape, fill=color, width = 2)
+                    shape = [(x2i, y1i), (x2o, y1o)] ; img.line(shape, fill=color, width = 2)
 
 
     def get_location_for_text(self, img, obj, txt):

@@ -148,6 +148,7 @@ class MainWindow(QMainWindow, WindowMixin):
         list_layout = QVBoxLayout()
         list_layout.setContentsMargins(0, 0, 0, 0)
 
+        # visible class types selection
         self.class_type_button = {}
         for class_type in self.bbl.stats.class_type_list:
             self.class_type_button[class_type] = QCheckBox(get_str(class_type))
