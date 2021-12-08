@@ -28,6 +28,7 @@ class Bbox:
         self.meristem = None
         self.has_associated_inner = False
         self.iou = {}
+        self.associated_user = defaultdict(float)
         self.user = None
         self.warning = None
 
@@ -271,6 +272,7 @@ class BboxList:
             iou = self.compute_iou_bbox_pair(obj_src.bbox, obj_tgt.bbox)
             if iou > iou_max:
                 iou_max = iou
+                obj_tgt.associated_user[obj_src.user] = iou_max
                 max_iou_userclass = f"{obj_tgt.class_base} by {obj_tgt.user}"
 
         iou_max = round(iou_max,2)

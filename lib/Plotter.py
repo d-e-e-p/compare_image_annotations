@@ -52,7 +52,7 @@ class DrawObject(object):
         return f"i={self.image} c={self.class_base} ru={self.ref_user} vt={self.visible_types} vu={self.visible_users} cs={self.color_pallet} ab={self.adjust_background} af={self.adjust_foreground}"
 
 class Plotter:
-    def __init__(self, bbl, img_dir, out_dir):
+    def __init__(self, bbl, args):
 
         self.bbl = bbl
         self.margin_x = 100
@@ -62,11 +62,11 @@ class Plotter:
         self.user_to_color = {}
         self.source_img = defaultdict(lambda: None)
         self.img_list = bbl.get_image_list();
-        self.read_images(img_dir)
+        self.read_images(args.img)
         self.add_margins()
         self.assign_colors_to_users()
-        self.fnt = self.get_font();
-        self.plot_iou_boxes(bbl, out_dir)
+        self.fnt = self.get_fonts();
+        self.plot_iou_boxes(bbl, args.out)
 
     # make sure all images exist in img_dir
     def read_images(self, img_dir):
@@ -88,22 +88,15 @@ class Plotter:
             self.source_img[image_name] = \
                     self.add_margin(self.source_img[image_name],0,self.margin_x,self.margin_y,0,(1, 1, 1))
 
-    def get_font(self):
-        #TODO: switch based on what is found
+    def get_fonts(self):
+        fnt = {}
         try:
-            fnt = ImageFont.truetype('Courier.ttc', 16)
+            fnt['norm'] = ImageFont.truetype('resources/fonts/FreeMono.ttf', 16)
+            fnt['bold'] = ImageFont.truetype('resources/fonts/FreeMonoBold.ttf', 16)
+            fnt['italic'] = ImageFont.truetype('resources/fonts/FreeMonoOblique.ttf', 16)
+            fnt['bolditalic'] = ImageFont.truetype('resources/fonts/FreeMonoBoldOblique.ttf', 16)
         except OSError:
-            try:
-                fnt = ImageFont.truetype('courbd.ttf', 16)
-            except OSError:
-                try:
-                    fnt = ImageFont.truetype('FreeMono.ttf', 16)
-                except OSError:
-                    try:
-                        fnt = ImageFont.truetype('/c/Windows/Fonts/courbd.ttf', 16)
-                    except OSError:
-                        logging.error("Can't find any font")
-                        raise Exception("font error")
+            raise Exception("font error: ")
         return fnt
 
     def assign_colors_to_users(self):
@@ -147,7 +140,7 @@ class Plotter:
 image = {image_name} class = {cls}
 """
                     img1 = ImageDraw.Draw(dest_img[key])
-                    img1.multiline_text((10,height-self.margin_y), txt , font=self.fnt, fill=(255, 255, 255))
+                    img1.multiline_text((10,height-self.margin_y), txt , font=self.fnt['bold'], fill=(255, 255, 255))
 
         # loop thru all boxes and draw them on dest
         #fnt = ImageFont.truetype('cour.ttf', 14)
@@ -161,7 +154,7 @@ image = {image_name} class = {cls}
                     iou_value = obj.iou[ref_user]
                     txt = f"iou={iou_value:.2f}"
                     x1, y1, x2, y2 = obj.bbox
-                    img1.text((x1+10,y1+10), txt , font=self.fnt, fill=(0, 0, 0))
+                    img1.text((x1+10,y1+10), txt , font=self.fnt['bold'], fill=(0, 0, 0))
                 #img1.rounded_rectangle(revised_box, radius=10, fill=None, outline=(255,0,0,128), width=2)
 
         # save destination images
@@ -169,6 +162,24 @@ image = {image_name} class = {cls}
             file_name = f"{out_dir}/{key}.jpg"
             dest_img[key].save(file_name)
         
+    def mark_boxes_in_ref_missing_in_user(self, img, dset, obj_list):
+       """
+       look for a property on obj_list of ref user
+       """
+       for obj in obj_list:
+            missing_users = set(self.bbl.stats.user_list).difference(obj.associated_user)
+            missing_users_visible = []
+            for user in missing_users:
+                if dset.visible_users[user] and user != dset.ref_user:
+                    missing_users_visible.append(user)
+            if missing_users_visible:
+                color = 'black'
+                txt = f"Missing {obj.class_base} {obj.class_type} from " + "\n".join(missing_users_visible)
+                xloc, yloc = self.get_random_nearby_loc(obj.bbox);
+                img.multiline_text((xloc,yloc), txt , font=self.fnt['bold'], fill=color)
+                logging.info(f"missing_users = {missing_users} missing_users_visible={missing_users_visible}")
+                logging.info(f"missing {txt} au={obj.associated_user}")
+
 
     def fetch_overlay_image(self, dset):
        
@@ -223,7 +234,10 @@ image = {image_name} class = {cls}
             if class_type == 'outer' and dset.visible_types['inout']:
                 self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, 'inout')
         
-
+        # mark missing box labels 
+        obj_list_f = self.bbl.filter(obj_list, 
+                image = dset.image, user = dset.ref_user, class_base = dset.class_base)
+        self.mark_boxes_in_ref_missing_in_user(img, dset, obj_list_f)
 
         # draw a key on top left
         self.draw_left_legend_for_overlay(img, dset)
@@ -253,7 +267,7 @@ image = {image_name} class = {cls}
         return txt
 
     def draw_box_text(self, img, txt, xloc, yloc, cell_width, cell_height, linespace, color, width):
-        img.text((xloc,yloc), txt , font=self.fnt, fill=color)
+        img.text((xloc,yloc), txt , font=self.fnt['bold'], fill=color)
         yloc -= (linespace - cell_height)/2
         bbox = [xloc, yloc, xloc + cell_width, yloc + linespace]
         img.rounded_rectangle(bbox, radius=2, fill=None, outline=color, width=width)
@@ -268,7 +282,7 @@ image = {image_name} class = {cls}
         max_username = max(dset.visible_users.keys())
         u_count =  defaultdict(lambda: 0)
         txt = self.get_text_for_report_line(max_username, 0, 0, u_count, max_username)
-        cell_width, cell_height = img.textsize(txt, self.fnt)
+        cell_width, cell_height = img.textsize(txt, self.fnt['bold'])
         max_txt_len = len(txt) # needed much later
 
         # ok, now compute total needed space based on that
@@ -316,6 +330,7 @@ image = {image_name} class = {cls}
 
 
 
+
     def draw_left_legend_for_overlay(self, img, dset):
         """
         tile and stuff
@@ -335,7 +350,7 @@ image = {image_name} class = {cls}
       Floating outer   = {dset.overlay_stats['outer_assoc']['not_associated']}  
 """
         color = 'white'
-        img.multiline_text((xloc,yloc), txt , font=self.fnt, fill=color)
+        img.multiline_text((xloc,yloc), txt , font=self.fnt['bold'], fill=color)
 
 
 
@@ -405,17 +420,17 @@ image = {image_name} class = {cls}
                     txt = f"iou={iou_value}"
                 #logging.info(f" calc: user={user} ref={ref_user} iou = {obj.iou}")
                 xloc, yloc = self.get_random_nearby_loc(obj.bbox);
-                img.text((xloc,yloc), txt , font=self.fnt, fill=color)
+                img.text((xloc,yloc), txt , font=self.fnt['bold'], fill=color)
                 if obj.warning is not None:
                     txt = f"potential mis-label!\n{obj.warning}"
                     xloc, yloc = self.get_location_for_text(img, obj, txt)
-                    img.text((xloc,yloc), txt , font=self.fnt, fill='red')
+                    img.text((xloc,yloc), txt , font=self.fnt['bold'], fill='red')
 
                 # inout # mark difficult objects
                 if obj.difficult:
                     xloc, yloc = self.get_random_nearby_loc(obj.bbox);
                     color = 'red'
-                    img.text((xloc, yloc), 'D' , font=self.fnt, fill=color)
+                    img.text((xloc, yloc), 'D' , font=self.fnt['bold'], fill=color)
 
         # ok now handle the inout case
         else:
@@ -442,7 +457,7 @@ image = {image_name} class = {cls}
         xloc = (x1+x2) / 2
         yloc = (y1+y2) / 2
         width, height = self.source_img[obj.image].size
-        textwidth, textheight = img.textsize(txt, self.fnt)
+        textwidth, textheight = img.textsize(txt, self.fnt['bold'])
         xloc -= round(textwidth / 2)
         yloc -= round(textheight / 2)
         if xloc + textwidth > width:

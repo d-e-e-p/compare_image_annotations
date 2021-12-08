@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='compare annotations in xml format between different image label sets')
     parser.add_argument('--verbose', action='store_true')
-    parser.add_argument('--tag')
+    parser.add_argument('--check', choices=['relaxed', 'normal', 'strict'], default='normal')
     parser.add_argument('--img', required=True, help='image directory')
     parser.add_argument('--xml', required=True, help='list of xml directories', nargs='+')
     parser.add_argument('--out', required=True, help='output directory')
@@ -76,21 +76,22 @@ def main():
 
     bbl = BboxList()
     print("    0 Loading xml:")
-    Parser(bbl, args.xml)
+    Parser(bbl, args)
     logging.info(bbl)
     bbl.update_stats()
-    print("    1 associating outer with meristem")
+    print("    1/5 associating outer with meristem")
     bbl.associate_stem_with_outer()
-    print("    2 computing IOU")
+    print("    2/5 computing IOU")
     bbl.compute_iou_for_each_annotation()
-    print("    3 finding potential mis-labels")
+    print("    3/5 finding potential mis-labels")
     bbl.locate_potential_mislabel()
-    print("    4 saving report plots")
-    pl = Plotter(bbl, args.img, args.out)
-    print("    5 loading gui")
+    print("    4/5 saving report plots")
+    pl = Plotter(bbl, args)
+    print("    5/5 loading gui")
 
-    app, _win = run_main_gui(bbl, pl, args.img, args.out)
+    app, _win = run_main_gui(bbl, pl, args)
     return app.exec_()
+print("    done")
 
 
 

@@ -170,7 +170,20 @@ class MainWindow(QMainWindow, WindowMixin):
 
         #import pdb; pdb.set_trace()
         list_layout.addSpacing(10)
+        # ref_user selection
 
+        ref_user_label = QLabel("Reference User:")
+        ref_user_label.setAlignment(Qt.AlignCenter)
+        list_layout.addWidget(ref_user_label)
+
+        self.ref_user_box = QComboBox()
+        self.ref_user_box.addItems(self.bbl.stats.user_list)
+
+        self.ref_user_box.currentIndexChanged.connect(self.draw_iou_boxes)
+
+        list_layout.addWidget(self.ref_user_box)
+
+        list_layout.addSpacing(20)
         iouLabel = QLabel("IOU Filter")
         iouLabel.setAlignment(Qt.AlignCenter)
         list_layout.addWidget(iouLabel)
@@ -292,23 +305,6 @@ class MainWindow(QMainWindow, WindowMixin):
         self.class_dock.setWidget(class_list_container)
         logging.info(f"self.class_list_widget = {self.class_list_widget}")
 
-        # based on list of users make up buttons for reference user
-
-        self.staff_box_widget = QVBoxLayout()
-
-        self.staff_buttons = {}
-        for user in self.bbl.stats.user_list:
-            self.staff_buttons[user] = QRadioButton(user)
-            self.staff_buttons[user].toggled.connect(partial(self.staff_button_toggled, user))
-            self.staff_box_widget.addWidget(self.staff_buttons[user])
-
-        staff_list_container = QWidget()
-        staff_list_container.setLayout(self.staff_box_widget)
-
-        self.staff_dock = QDockWidget("Reference Annotation", self)
-        self.staff_dock.setObjectName('reference')
-        self.staff_dock.setWidget(staff_list_container)
-
         self.zoom_widget = ZoomWidget()
         self.color_dialog = ColorDialog(parent=self)
 
@@ -336,7 +332,6 @@ class MainWindow(QMainWindow, WindowMixin):
         # add docks to RHS
         self.setCentralWidget(scroll)
         self.addDockWidget(Qt.RightDockWidgetArea, self.annotation_dock)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.staff_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.class_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
         self.file_dock.setFeatures(QDockWidget.DockWidgetFloatable)
@@ -1775,9 +1770,14 @@ class MainWindow(QMainWindow, WindowMixin):
         # ok now set a reference user if nobody is defined
         if not self.ref_user:
             self.ref_user = self.bbl.get_best_ref_user(imgName, class_list[0])
+            # update widget as well..assume order of user_list
+            index = list(self.bbl.stats.user_list).index(self.ref_user)
+            self.ref_user_box.setCurrentIndex(index)
+
             #self.staff_buttons[self.ref_user].setToolTip(f"{self.ref_user} has the most annotations for this image")
-            self.staff_buttons[self.ref_user].setChecked(True)
-            logging.info(f"user = {self.ref_user} button status = {self.staff_buttons[self.ref_user].isChecked()}")
+            logging.info(f"{self.ref_user} has the most annotations for this image: setting as ref")
+            logging.info(f"ref_user = {self.ref_user} ")
+
 
     # iou filter value changed
     def iou_filter_value_changed(self):
@@ -1847,6 +1847,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         class_base = self.class_list_widget.selectedItems()[0].text()
         image = self.current_image
+        self.ref_user = self.ref_user_box.currentText()
 
         visible_users = {}
         for user in self.bbl.stats.user_list:
@@ -1914,7 +1915,7 @@ def read(filename, default=None):
         return default
 
 
-def run_main_gui(bbl, pl, image_dir, save_dir):
+def run_main_gui(bbl, pl, args):
     """
     boilerplate Qt application code to bring up main window
     Do everything but app.exec_() -- so that we can test the application in one thread
@@ -1926,9 +1927,9 @@ def run_main_gui(bbl, pl, image_dir, save_dir):
     app.setStyle('Fusion')
 
     # Usage : labelImg.py image classFile saveDir
-    logging.info(f" image dir: {image_dir}")
-    logging.info(f" save  dir: {save_dir}")
-    win = MainWindow(bbl, pl, image_dir, save_dir)
+    logging.info(f" image dir: {args.img}")
+    logging.info(f" save  dir: {args.out}")
+    win = MainWindow(bbl, pl, args.img, args.out)
     win.show()
     return app, win
 

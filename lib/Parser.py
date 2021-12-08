@@ -11,11 +11,11 @@ from lib.Bbox   import Bbox
 from lib.Bbox   import BboxList
 
 class Parser:
-    def __init__(self, bbl, xml_paths) :
-        self.parse_xml_dirs(bbl, xml_paths)
+    def __init__(self, bbl, args) :
+        self.parse_xml_dirs(bbl, args.xml, args.check)
 
 
-    def parse_xml_dirs(self, bbl,  xml_path):
+    def parse_xml_dirs(self, bbl,  xml_path, check_level):
         """
         get the object in each xml file under xml_path
         """
@@ -24,11 +24,19 @@ class Parser:
             for xml in glob(os.path.join(path, '*' + xml_ext)):
                 #logging.info(f"-> parsing xml file: {xml}")
                 print(f"    -> loading xml file: {xml}")
-                bbl.bbox_obj_list.extend(self.parse_xml_file(path, xml))
+                bbl.bbox_obj_list.extend(self.parse_xml_file(path, xml, check_level))
 
 
+    def collapse_class_names(self, class_base):
+        """
+        easy mode
+        """
+        if 'carrot' in class_base:
+            return 'carrot'
+        else:
+            return 'weed'
 
-    def parse_xml_file(self, dir, file):
+    def parse_xml_file(self, dir, file, check_level):
 #    """
 #    parse xml file that looks like:
 #
@@ -89,6 +97,9 @@ class Parser:
                 class_type = class_type_name
                 if class_type_name == "meristem":
                     class_type = "inner"
+
+                if check_level == "relaxed": 
+                    class_base = self.collapse_class_names(class_base)
 
                 bbox = Bbox(dir, file, image,  class_base, class_type, difficult, [xmin, ymin, xmax, ymax])
                 bbox_list.append(bbox)
