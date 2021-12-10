@@ -1,7 +1,9 @@
 ###########################################################################################
-#                                                                                         #
 # Plotter
-#                                                                                         #
+# 
+# 1. dump static jpeg with report on annotations
+# 2. produce interactive overlay based on user/class selection
+#
 ###########################################################################################
 
 import sys
@@ -164,20 +166,34 @@ image = {image_name} class = {cls}
         
     def mark_boxes_in_ref_missing_in_user(self, img, dset, obj_list):
        """
-       look for a property on obj_list of ref user
+       look for a property on obj_list of ref user for associated user
+       skip warning for zero annotation
        """
+       logging.info(f"obj_list: = {obj_list:}")
        for obj in obj_list:
             missing_users = set(self.bbl.stats.user_list).difference(obj.associated_user)
-            missing_users_visible = []
-            for user in missing_users:
-                if dset.visible_users[user] and user != dset.ref_user:
-                    missing_users_visible.append(user)
-            if missing_users_visible:
-                color = 'black'
-                txt = f"Missing {obj.class_base} {obj.class_type} from " + "\n".join(missing_users_visible)
+            logging.info(f"missing_users1 = {missing_users}")
+            missing_users.remove(dset.ref_user)
+            logging.info(f"missing_users2 = {missing_users}")
+            # remove not visible
+            missing_users = list(filter(lambda user: dset.visible_users[user], missing_users))
+            logging.info(f"missing_users3 = {missing_users}")
+
+            # remove with no annotations at all
+            missing_users_loop = missing_users
+            for user in missing_users_loop:
+                userclass = f"{user}_outer"
+                if dset.overlay_stats['userclass'][userclass] == 0:
+                    missing_users.remove(user)
+            logging.info(f"missing_users4 = {missing_users}")
+
+
+            # filter for count
+            if missing_users:
+                color = 'white'
+                txt = f"Missing {obj.class_base} {obj.class_type} from " + "\n".join(missing_users)
                 xloc, yloc = self.get_random_nearby_loc(obj.bbox);
                 img.multiline_text((xloc,yloc), txt , font=self.fnt['bold'], fill=color)
-                logging.info(f"missing_users = {missing_users} missing_users_visible={missing_users_visible}")
                 logging.info(f"missing {txt} au={obj.associated_user}")
 
 
@@ -234,9 +250,18 @@ image = {image_name} class = {cls}
             if class_type == 'outer' and dset.visible_types['inout']:
                 self.draw_boxes_for_object(img, obj_list_f, dset.ref_user, 'inout')
         
-        # mark missing box labels 
+        # mark missing box labels .. assume totals have been calculated
+        # only for outer
+
+        logging.info(f" before filter: {obj_list}")
+        for obj in obj_list:
+            logging.info(f" before filter: n={obj.user} c={obj.class_type}")
         obj_list_f = self.bbl.filter(obj_list, 
-                image = dset.image, user = dset.ref_user, class_base = dset.class_base)
+                user = dset.ref_user, 
+                class_type='outer')
+        logging.info(f" after filter: {obj_list_f}")
+        for obj in obj_list_f:
+            logging.info(f" after filter: n={obj.user} c={obj.class_type}")
         self.mark_boxes_in_ref_missing_in_user(img, dset, obj_list_f)
 
         # draw a key on top left

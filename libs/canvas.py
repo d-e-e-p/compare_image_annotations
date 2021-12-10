@@ -12,6 +12,8 @@ CURSOR_DRAW    = Qt.CursorShape.CrossCursor
 CURSOR_MOVE    = Qt.CursorShape.ClosedHandCursor
 CURSOR_GRAB    = Qt.CursorShape.OpenHandCursor
 
+import logging
+
 # class Canvas(QGLWidget):
 
 
@@ -23,7 +25,7 @@ class Canvas(QWidget):
     shapeMoved = pyqtSignal()
     drawingPolygon = pyqtSignal(bool)
 
-    CREATE, EDIT = list(range(2))
+    CREATE, EDIT, ZOOM = list(range(3))
 
     epsilon = 11.0
 
@@ -84,6 +86,16 @@ class Canvas(QWidget):
 
     def editing(self):
         return self.mode == self.EDIT
+
+    def zooming(self):
+        return self.mode == self.ZOOM
+
+    def set_zooming(self, value=True):
+        self.mode = self.ZOOM
+        #self.un_highlight()
+        #self.de_select_shape()
+        self.prev_point = QPointF()
+        self.repaint()
 
     def set_editing(self, value=True):
         self.mode = self.EDIT if value else self.CREATE
@@ -254,6 +266,9 @@ class Canvas(QWidget):
         if ev.button() == Qt.LeftButton:
             if self.drawing():
                 self.handle_drawing(pos)
+            elif self.zooming():
+                logging.info(f"zooming: ")
+                self.handle_zooming(pos)
             else:
                 selection = self.select_shape_point(pos)
                 self.prev_point = pos
@@ -312,7 +327,33 @@ class Canvas(QWidget):
             self.set_hiding(True)
             self.repaint()
 
+    def handle_zooming(self, pos):
+        logging.info(f"handle_zoommig {pos} current={self.current}")
+        if self.current and self.current.reach_max_points() is False:
+            logging.info(f"current={self.current} masse = {self.current.reach_max_points()}")
+            init_pos = self.current[0]
+            min_x = init_pos.x()
+            min_y = init_pos.y()
+            target_pos = self.line[1]
+            max_x = target_pos.x()
+            max_y = target_pos.y()
+            self.current.add_point(QPointF(max_x, min_y))
+            self.current.add_point(target_pos)
+            self.current.add_point(QPointF(min_x, max_y))
+            self.finalise()
+            logging.info(f"init = {init_pos} tar = {target_pos}")
+        elif not self.out_of_pixmap(pos):
+            self.current = Shape()
+            self.current.add_point(pos)
+            self.line.points = [pos, pos]
+            self.set_hiding()
+            self.drawingPolygon.emit(True)
+            self.update()
+            logging.info(f"draw line {pos}")
+
+
     def handle_drawing(self, pos):
+        logging.info(f"handle_drawing {pos}")
         if self.current and self.current.reach_max_points() is False:
             init_pos = self.current[0]
             min_x = init_pos.x()
@@ -324,6 +365,7 @@ class Canvas(QWidget):
             self.current.add_point(target_pos)
             self.current.add_point(QPointF(min_x, max_y))
             self.finalise()
+            logging.info(f"init = {init_pos} tar = {target_pos}")
         elif not self.out_of_pixmap(pos):
             self.current = Shape()
             self.current.add_point(pos)
@@ -331,6 +373,7 @@ class Canvas(QWidget):
             self.set_hiding()
             self.drawingPolygon.emit(True)
             self.update()
+            logging.info(f"draw line {pos}")
 
     def set_hiding(self, enable=True):
         self._hide_background = self.hide_background if enable else False
@@ -565,6 +608,7 @@ class Canvas(QWidget):
         return not (0 <= p.x() <= w and 0 <= p.y() <= h)
 
     def finalise(self):
+        logging.info(f"icurrent = {self.current}")
         assert self.current
         if self.current.points[0] == self.current.points[-1]:
             self.current = None
@@ -576,7 +620,10 @@ class Canvas(QWidget):
         self.shapes.append(self.current)
         self.current = None
         self.set_hiding(False)
-        self.newShape.emit()
+        if self.mode == self.ZOOM:
+            logging.info(f"starting to zoom")
+        else:
+            self.newShape.emit()
         self.update()
 
     def close_enough(self, p1, p2):

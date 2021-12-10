@@ -161,6 +161,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         list_layout.addSpacing(50)
 
+        # visible users selection
         self.user_button = {}
         for user in self.bbl.stats.user_list:
             self.user_button[user] = QCheckBox(user)
@@ -253,6 +254,9 @@ class MainWindow(QMainWindow, WindowMixin):
         #self.combo_box = ComboBox(self)
         #list_layout.addWidget(self.combo_box)
 
+        #self.edit_button = QToolButton()
+        #self.edit_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+
         # Create and add a widget for showing current label items
         self.label_list = QListWidget()
         label_list_container = QWidget()
@@ -262,7 +266,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.label_list.itemDoubleClicked.connect(self.edit_label)
         # Connect to itemChanged to detect checkbox changes.
         self.label_list.itemChanged.connect(self.label_item_changed)
-        list_layout.addWidget(self.label_list)
+        #list_layout.addWidget(self.label_list)
 
         self.annotation_dock = QDockWidget("Annotations to Display", self)
         self.annotation_dock.setObjectName('xml')
@@ -438,6 +442,8 @@ class MainWindow(QMainWindow, WindowMixin):
                          'Ctrl++', 'zoom-in', get_str('zoominDetail'), enabled=False)
         zoom_out = action(get_str('zoomout'), partial(self.add_zoom, -10),
                           'Ctrl+-', 'zoom-out', get_str('zoomoutDetail'), enabled=False)
+        zoom_sel = action(get_str('zoomsel'), partial(self.zoom_to_selection),
+                          '', 'zoom-out', get_str('zoomselDetail'), enabled=False)
         zoom_org = action(get_str('originalsize'), partial(self.set_zoom, 100),
                           'Ctrl+=', 'zoom', get_str('originalsizeDetail'), enabled=False)
         fit_window = action(get_str('fitWin'), self.set_fit_window,
@@ -447,7 +453,7 @@ class MainWindow(QMainWindow, WindowMixin):
                            'Ctrl+Shift+F', 'fit-width', get_str('fitWidthDetail'),
                            checkable=True, enabled=False)
         # Group zoom controls into a list for easier toggling.
-        zoom_actions = (self.zoom_widget, zoom_in, zoom_out,
+        zoom_actions = (self.zoom_widget, zoom_in, zoom_out, zoom_sel,
                         zoom_org, fit_window, fit_width)
         self.zoom_mode = self.MANUAL_ZOOM
         self.scalers = {
@@ -457,6 +463,10 @@ class MainWindow(QMainWindow, WindowMixin):
             self.MANUAL_ZOOM: lambda: 1,
         }
 
+        edit = action(get_str('editLabel'), self.edit_label,
+                      'Ctrl+E', 'edit', get_str('editLabelDetail'),
+                      enabled=False)
+        #self.edit_button.setDefaultAction(edit)
 
         shape_line_color = action(get_str('shapeLineColor'), self.choose_shape_line_color,
                                   icon='color_line', tip=get_str('shapeLineColorDetail'),
@@ -478,10 +488,10 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Store actions for further handling.
         self.actions = Struct(save=save, save_format=save_format, saveAs=save_as, open=open, close=close, resetAll=reset_all, deleteImg=delete_image,
-                              lineColor=color1, create=create, delete=delete, copy=copy,
+                              lineColor=color1, create=create, edit=edit,  delete=delete, copy=copy,
                               createMode=create_mode, editMode=edit_mode, advancedMode=advanced_mode,
                               shapeLineColor=shape_line_color, shapeFillColor=shape_fill_color,
-                              zoom=zoom, zoomIn=zoom_in, zoomOut=zoom_out, zoomOrg=zoom_org,
+                              zoom=zoom, zoomIn=zoom_in, zoomOut=zoom_out, zoomSel=zoom_sel, zoomOrg=zoom_org,
                               fitWindow=fit_window, fitWidth=fit_width,
                               zoomActions=zoom_actions,
                               fileMenuActions=(
@@ -529,7 +539,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.display_label_option,
             labels, advanced_mode, None,
             hide_all, show_all, None,
-            zoom_in, zoom_out, zoom_org, None,
+            zoom_in, zoom_out, zoom_sel, zoom_org, None,
             fit_window, fit_width))
 
         self.menus.file.aboutToShow.connect(self.update_file_menu)
@@ -547,7 +557,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.actions.beginner = (
             open_next_image, open_prev_image, None, None,
-            zoom_in, zoom, zoom_out, fit_window, fit_width)
+            zoom_in, zoom, zoom_out, zoom_sel, fit_window, fit_width)
 
         self.actions.advanced = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, save, save_format, None,
@@ -681,7 +691,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self._beginner = not value
         self.canvas.set_editing(True)
         self.populate_mode_actions()
-        self.edit_button.setVisible(not value)
+        #self.edit_button.setVisible(not value)
         if value:
             self.actions.createMode.setEnabled(True)
             self.actions.editMode.setEnabled(False)
@@ -1026,7 +1036,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.canvas.select_shape(self.items_to_shapes[item])
             shape = self.items_to_shapes[item]
             # Add Chris
-            self.diffc_button.setChecked(shape.difficult)
+            #self.diffc_button.setChecked(shape.difficult)
 
     def label_item_changed(self, item):
         shape = self.items_to_shapes[item]
@@ -1093,6 +1103,12 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def add_zoom(self, increment=10):
         self.set_zoom(self.zoom_widget.value() + increment)
+        self.zoom_mode = self.MANUAL_ZOOM
+
+
+    def zoom_to_selection(self):
+        self.canvas.set_zooming(True)
+
 
     def zoom_request(self, delta):
         # get the current scrollbar positions
@@ -1924,7 +1940,7 @@ def run_main_gui(bbl, pl, args):
     app = QApplication(argv)
     app.setApplicationName(__appname__)
     app.setWindowIcon(new_icon("app"))
-    app.setStyle('Fusion')
+    #app.setStyle('Fusion')
 
     # Usage : labelImg.py image classFile saveDir
     logging.info(f" image dir: {args.img}")
