@@ -1782,8 +1782,10 @@ class MainWindow(QMainWindow, WindowMixin):
         if not class_list:
             return
         self.class_list_widget.clear()
+        logging.info(f"class list widget clear")
         for cls in class_list:
             self.class_list_widget.addItem(cls)
+        logging.info(f"added classes: {class_list}")
         # make one of the items in the list selected
         self.class_list_widget.setCurrentRow(0)
         # also make it setselected to true
@@ -1791,9 +1793,12 @@ class MainWindow(QMainWindow, WindowMixin):
         self.class_list_widget.item(0).setSelected(True)
         # ok now set a reference user if nobody is defined
         if not self.ref_user:
+            logging.info(f"get best ref for {imgName}, {class_list[0]}")
             self.ref_user = self.bbl.get_best_ref_user(imgName, class_list[0])
             # update widget as well..assume order of user_list
+            logging.info(f"self.ref_user = {self.ref_user}")
             index = list(self.bbl.stats.user_list).index(self.ref_user)
+            logging.info(f"index = {index}")
             self.ref_user_box.setCurrentIndex(index)
 
             #self.staff_buttons[self.ref_user].setToolTip(f"{self.ref_user} has the most annotations for this image")
