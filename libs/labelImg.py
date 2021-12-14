@@ -452,9 +452,12 @@ class MainWindow(QMainWindow, WindowMixin):
         fit_width = action(get_str('fitWidth'), self.set_fit_width,
                            'Ctrl+Shift+F', 'fit-width', get_str('fitWidthDetail'),
                            checkable=True, enabled=False)
+        refresh = action(get_str('refresh'), self.set_reload,
+                           'Ctrl+Shift+R', 'refresh', get_str('refreshDetail'),
+                           checkable=True, enabled=False)
         # Group zoom controls into a list for easier toggling.
         zoom_actions = (self.zoom_widget, zoom_in, zoom_out, zoom_sel,
-                        zoom_org, fit_window, fit_width)
+                        zoom_org, fit_window, fit_width, refresh)
         self.zoom_mode = self.MANUAL_ZOOM
         self.scalers = {
             self.FIT_WINDOW: self.scale_fit_window,
@@ -492,7 +495,7 @@ class MainWindow(QMainWindow, WindowMixin):
                               createMode=create_mode, editMode=edit_mode, advancedMode=advanced_mode,
                               shapeLineColor=shape_line_color, shapeFillColor=shape_fill_color,
                               zoom=zoom, zoomIn=zoom_in, zoomOut=zoom_out, zoomSel=zoom_sel, zoomOrg=zoom_org,
-                              fitWindow=fit_window, fitWidth=fit_width,
+                              fitWindow=fit_window, fitWidth=fit_width, refresh=refresh,
                               zoomActions=zoom_actions,
                               fileMenuActions=(
                                   open, open_dir, save, save_as, close, reset_all, quit),
@@ -540,7 +543,7 @@ class MainWindow(QMainWindow, WindowMixin):
             labels, advanced_mode, None,
             hide_all, show_all, None,
             zoom_in, zoom_out, zoom_sel, zoom_org, None,
-            fit_window, fit_width))
+            fit_window, fit_width, refresh))
 
         self.menus.file.aboutToShow.connect(self.update_file_menu)
 
@@ -553,11 +556,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.tools = self.toolbar('Tools')
         self.actions.beginner = (
             open_dir, change_save_dir, open_next_image, open_prev_image, verify, save, save_format, None, create, copy, delete, None,
-            zoom_in, zoom, zoom_out, fit_window, fit_width)
+            zoom_in, zoom, zoom_out, fit_window, fit_width, refresh)
 
         self.actions.beginner = (
             open_next_image, open_prev_image, None, None,
-            zoom_in, zoom, zoom_out, zoom_sel, fit_window, fit_width)
+            zoom_in, zoom, zoom_out, zoom_sel, fit_window, fit_width, refresh)
 
         self.actions.advanced = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, save, save_format, None,
@@ -1105,10 +1108,12 @@ class MainWindow(QMainWindow, WindowMixin):
         self.set_zoom(self.zoom_widget.value() + increment)
         self.zoom_mode = self.MANUAL_ZOOM
 
+    def set_reload(self):
+        self.draw_iou_boxes(force_draw=True)
+
 
     def zoom_to_selection(self):
-        self.canvas.zoom_window = True
-        self.create_shape()
+        self.canvas.set_zooming(True)
 
 
     def zoom_request(self, delta):
@@ -1852,7 +1857,7 @@ class MainWindow(QMainWindow, WindowMixin):
         logging.info(f"class item selected : {class_base}")
         self.draw_iou_boxes()
             
-    def draw_iou_boxes(self):
+    def draw_iou_boxes(self, force_draw=False):
         logging.info(f"draw -----------------------------------------")
         if self.class_list_widget.selectedItems().__len__() == 0:
             logging.info(f"draw: no class selected")
@@ -1877,7 +1882,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         dobj = DrawObject(image, class_base, self.ref_user, visible_types, visible_users, self.iou_filter_value,
                         self.color_pallet , self.adjust_background, self.adjust_foreground,)
-        if dobj != self.current_draw_object:
+        if force_draw or dobj != self.current_draw_object:
             self.current_draw_object = dobj
             logging.info(f"draw: new draw object {dobj}")
             self.draw_overlay_on_canvas()
@@ -1940,7 +1945,7 @@ def run_main_gui(bbl, pl, args):
     argv = []
     app = QApplication(argv)
     app.setApplicationName(__appname__)
-    app.setWindowIcon(new_icon("app"))
+    app.setWindowIcon(new_icon("tensor"))
     #app.setStyle('Fusion')
 
     # Usage : labelImg.py image classFile saveDir

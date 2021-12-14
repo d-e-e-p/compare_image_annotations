@@ -29,6 +29,12 @@ class ColorScheme():
         return palletname_list
 
     def get_colors_for_pallet(self, palletname , size_requested):
+        col = ['#fa8174', '#81b1d2', '#bc82bd', '#ccebc4', '#ffed6f']
+        col = ['#fa8174', '#81b1d2', '#fdb462', '#b3de69', '#bc82bd']
+        col = ['#FFA700', '#FFF700', '#32CD32']
+        col = "#c8a999  #bdc0c8  #00fdc2  #8caeff  #00ff00  #ff9248  #f97eff  #ffe7a1  #ff908e".split()
+        col = ['#B0BF1A', '#3DDC84', '#FF91AF', '#66FF00', '#FFAA1D'] # de=21
+        #return col
 
         key = palletname.split('_')[0]
            
