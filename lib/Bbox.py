@@ -18,7 +18,7 @@ class DeepDict(defaultdict):
 
 class Bbox:
     def __init__ (self, dir, file, image,  class_base, class_type, difficult, bbox):
-        self.dir  = dir
+        self.dir  = dir.replace(os.path.sep,'/')
         self.file = file
         self.image = image
         self.class_base = class_base
@@ -134,13 +134,12 @@ class BboxList:
         dir = sorted(set(dir))
         user_to_dir_map = self.get_min_path_to_make_unique(dir)
         logging.info(f" user_to_dir_map = {user_to_dir_map}")
-        #import pdb; pdb.set_trace()
 
         dir_to_user_map = defaultdict(str)
         for user,d  in user_to_dir_map.items():
             dir_to_user_map[d] = user
 
-        logging.info(f" map = {dir_to_user_map}")
+        logging.info(f" dir_to_user_map = {dir_to_user_map}")
         return user_to_dir_map, dir_to_user_map
 
 

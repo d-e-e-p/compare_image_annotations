@@ -9,7 +9,7 @@
 import sys
 from collections import defaultdict, OrderedDict
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
-from os.path import exists, join
+from os.path import exists, join, isdir, isfile
 import logging
 import io
 import math
@@ -94,12 +94,14 @@ class Plotter:
         fnt = {}
         # need to handle pyinstaller data file, see:
         # https://stackoverflow.com/questions/51060894/adding-a-data-file-in-pyinstaller-using-the-onefile-option
-
-        try:
-            # PyInstaller creates a temp folder and stores path in _MEIPASS
-            font_path = sys._MEIPASS + '/fonts/'
-        except Exception:
-            font_path = 'resources/fonts/'
+        path = 'resources/fonts/'
+        font_path = self.findDir(path)
+        if font_path is None:
+            try:
+                # PyInstaller creates a temp folder and stores path in _MEIPASS
+                font_path = sys._MEIPASS + '/fonts/'
+            except Exception:
+                font_path = 'resources/fonts/'
 
         if exists(font_path):
             logging.info(f" font_path all OK: {font_path}")
@@ -208,7 +210,7 @@ image = {image_name} class = {cls}
             # filter for count
             if missing_users:
                 color = 'white'
-                txt = f"Missing {obj.class_base} {obj.class_type} from " + "\n".join(missing_users)
+                txt = f"Missing {obj.class_base} {obj.class_type} from\n" + "\n".join(missing_users)
                 xloc, yloc = self.get_random_nearby_loc(obj.bbox);
                 img.multiline_text((xloc,yloc), txt , font=self.fnt['bold'], fill=color)
                 logging.info(f"missing {txt} au={obj.associated_user}")
@@ -531,3 +533,19 @@ image = {image_name} class = {cls}
         result = Image.new(pil_img.mode, (new_width, new_height), color)
         result.paste(pil_img, (left, top))
         return result
+
+    # from https://www.oreilly.com/library/view/python-cookbook/0596001673/ch04s22.html
+    def _find(self, pathname, matchFunc=isfile):
+        for dirname in sys.path:
+            candidate = join(dirname, pathname)
+            if matchFunc(candidate):
+                return candidate
+            else:
+                return None
+        
+
+    def findFile(self, pathname):
+        return self._find(pathname)
+
+    def findDir(self, path):
+        return self._find(path, matchFunc=isdir)

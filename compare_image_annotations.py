@@ -19,7 +19,7 @@ from lib.Parser  import Parser
 from lib.Plotter import Plotter
 from lib.constants import VERSION, BUILD_DATE, AUTHOR
 
-from libs.labelImg import *
+from libs.labelImg import run_main_gui
 
 __author__      = 'deep@tensorfield.ag'
 __copyright__   = 'Copyright (C) 2021 - Tensorfield Ag '
@@ -58,6 +58,34 @@ def validate_args(args: argparse.Namespace):
 
     return err
 
+def setup_logging(args):
+
+    log = logging.getLogger()
+
+    format_long = logging.Formatter(
+    '%(levelname)s | %(module)s | %(funcName)s | %(lineno)d : %(message)s')
+    format_short = logging.Formatter('%(levelname)s : %(message)s')
+
+    #logging.basicConfig(level=logging.DEBUG)
+    log.setLevel(logging.DEBUG)
+
+    stream_handler = logging.StreamHandler()
+    if args.verbose:
+        stream_handler.setLevel(logging.DEBUG)
+        stream_handler.setFormatter(format_long)
+    else:
+        stream_handler.setLevel(logging.WARNING)
+        stream_handler.setFormatter(format_short)
+    log.addHandler(stream_handler)
+
+    logFilePath = os.path.join(args.out, "debug.log")
+    file_handler = logging.FileHandler(filename=logFilePath)
+    file_handler.setFormatter(format_long)
+    file_handler.setLevel(logging.DEBUG)
+    log.addHandler(file_handler)
+
+    return log
+
 
 def main(): 
 
@@ -65,15 +93,12 @@ def main():
 
     args = parse_args()
 
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG, force=True)
-        logging.basicConfig(format='%(levelname)s %(module)s %(funcName)s %(lineno)d %(message)s', force=True)
-        logging.warning(args)
-    else:
-        logging.basicConfig(level=logging.WARNING)
-        logging.basicConfig(format='%(levelname)s %(message)s', force=True)
-
+    setup_logging(args)
     logging.debug(args)
+    logging.info(args)
+    logging.warning(args)
+    logging.error(args)
+
     # return if validate fails to find dirs
     if err := validate_args(args):
         return err
