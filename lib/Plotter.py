@@ -92,11 +92,28 @@ class Plotter:
 
     def get_fonts(self):
         fnt = {}
+        # need to handle pyinstaller data file, see:
+        # https://stackoverflow.com/questions/51060894/adding-a-data-file-in-pyinstaller-using-the-onefile-option
+
         try:
-            fnt['norm'] = ImageFont.truetype('resources/fonts/FreeMono.ttf', 16)
-            fnt['bold'] = ImageFont.truetype('resources/fonts/FreeMonoBold.ttf', 16)
-            fnt['italic'] = ImageFont.truetype('resources/fonts/FreeMonoOblique.ttf', 16)
-            fnt['bolditalic'] = ImageFont.truetype('resources/fonts/FreeMonoBoldOblique.ttf', 16)
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            font_path = sys._MEIPASS + '/fonts/'
+        except Exception:
+            font_path = 'resources/fonts/'
+
+        if exists(font_path):
+            logging.info(f" font_path all OK: {font_path}")
+        else:
+            logging.info(f" font_path missing : {font_path}")
+            print(f" font_path missing : {font_path}")
+            exit(-1)
+
+        #import pdb; pdb.set_trace()
+        try:
+            fnt['norm'] = ImageFont.truetype(font_path + 'FreeMono.ttf', 16)
+            fnt['bold'] = ImageFont.truetype(font_path + 'FreeMonoBold.ttf', 16)
+            fnt['italic'] = ImageFont.truetype(font_path + 'FreeMonoOblique.ttf', 16)
+            fnt['bolditalic'] = ImageFont.truetype(font_path + 'FreeMonoBoldOblique.ttf', 16)
         except OSError:
             raise Exception("font error: ")
         return fnt

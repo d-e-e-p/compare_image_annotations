@@ -3,12 +3,25 @@
 block_cipher = None
 
 
+import datetime
+
+bd = datetime.datetime.now()
+auth = "deep@tensorfield.ag"
+vers = "1.8"
+
+# Write version info into _constants.py resource file
+with open('lib/constants.py', 'w') as f:
+    f.write(f'VERSION    = "{vers}"\n')
+    f.write(f'BUILD_DATE = "{bd}"  \n')
+    f.write(f'AUTHOR     = "{auth}"\n')
+
+
 
 
 a = Analysis(['compare_image_annotations.py'],
-             pathex=['.'],
+             pathex=[],
              binaries=[],
-             datas=[],
+             datas=[('resources/fonts', 'fonts')],
              hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],
@@ -32,10 +45,4 @@ exe = EXE(pyz,
           upx=True,
           upx_exclude=[],
           runtime_tmpdir=None,
-          console=True )
-
-
-
-a.datas += [('C:\\Users\\deep\\.conda\\envs\\compare_image_annotations\\lib\\site-packages\\palettable\\colorbrewer\\data\\colorbrewer_all_schemes.csv', 'palettable\\colorbrewer\\data'), ('C:\\Users\\deep\\.conda\\envs\\compare_image_annotations\\lib\\site-packages\\palettable\\colorbrewer\\data\\colorbrewer_all_schemes.json', 'palettable\\colorbrewer\\data'), ('C:\\Users\\deep\\.conda\\envs\\compare_image_annotations\\lib\\site-packages\\palettable\\colorbrewer\\data\\colorbrewer_licence.txt', 'palettable\\colorbrewer\\data')]
-
-
+          console=True , icon='resources/icons/tf.ico')

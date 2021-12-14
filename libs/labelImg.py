@@ -1107,7 +1107,8 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
     def zoom_to_selection(self):
-        self.canvas.set_zooming(True)
+        self.canvas.zoom_window = True
+        self.create_shape()
 
 
     def zoom_request(self, delta):

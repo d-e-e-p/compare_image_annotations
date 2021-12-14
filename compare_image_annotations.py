@@ -17,6 +17,7 @@ from lib.Bbox    import Bbox
 from lib.Bbox    import BboxList
 from lib.Parser  import Parser
 from lib.Plotter import Plotter
+from lib.constants import VERSION, BUILD_DATE, AUTHOR
 
 from libs.labelImg import *
 
@@ -59,6 +60,9 @@ def validate_args(args: argparse.Namespace):
 
 
 def main(): 
+
+    print(f"{__appnane__}: version {VERSION} build {BUILD_DATE}\n")
+
     args = parse_args()
 
     if args.verbose:

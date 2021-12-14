@@ -25,7 +25,8 @@ class Canvas(QWidget):
     shapeMoved = pyqtSignal()
     drawingPolygon = pyqtSignal(bool)
 
-    CREATE, EDIT, ZOOM = list(range(3))
+    CREATE, EDIT, = list(range(2))
+    
 
     epsilon = 11.0
 
@@ -61,6 +62,7 @@ class Canvas(QWidget):
         self.setFocusPolicy(Qt.WheelFocus)
         self.verified = False
         self.draw_square = False
+        self.zoom_window = False
 
         # initialisation for panning
         self.pan_initial_pos = QPoint()
@@ -87,22 +89,15 @@ class Canvas(QWidget):
     def editing(self):
         return self.mode == self.EDIT
 
-    def zooming(self):
-        return self.mode == self.ZOOM
-
-    def set_zooming(self, value=True):
-        self.mode = self.ZOOM
-        #self.un_highlight()
-        #self.de_select_shape()
-        self.prev_point = QPointF()
-        self.repaint()
-
     def set_editing(self, value=True):
         self.mode = self.EDIT if value else self.CREATE
         if not value:  # Create
+            logging.info(f"un highlight")
             self.un_highlight()
+            logging.info(f"de select highlight")
             self.de_select_shape()
         self.prev_point = QPointF()
+        logging.info(f"prev_poik = {self.prev_point}")
         self.repaint()
 
     def un_highlight(self):
@@ -266,9 +261,6 @@ class Canvas(QWidget):
         if ev.button() == Qt.LeftButton:
             if self.drawing():
                 self.handle_drawing(pos)
-            elif self.zooming():
-                logging.info(f"zooming: ")
-                self.handle_zooming(pos)
             else:
                 selection = self.select_shape_point(pos)
                 self.prev_point = pos
@@ -610,6 +602,11 @@ class Canvas(QWidget):
     def finalise(self):
         logging.info(f"icurrent = {self.current}")
         assert self.current
+        if self.zoom_window:
+            logging.info(f"starting to zoom")
+            logging.info(f"{self.current.points}")
+            self.zoom_window = False
+            return
         if self.current.points[0] == self.current.points[-1]:
             self.current = None
             self.drawingPolygon.emit(False)
@@ -620,10 +617,7 @@ class Canvas(QWidget):
         self.shapes.append(self.current)
         self.current = None
         self.set_hiding(False)
-        if self.mode == self.ZOOM:
-            logging.info(f"starting to zoom")
-        else:
-            self.newShape.emit()
+        self.newShape.emit()
         self.update()
 
     def close_enough(self, p1, p2):
