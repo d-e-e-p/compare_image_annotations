@@ -32,6 +32,9 @@ class Bbox:
         self.user = None
         self.warning = None
 
+    def __str__(self):
+        return str(self.__dict__)
+
 class Stats:
     def __init__ (self):
         self.image_list =  []
@@ -42,6 +45,9 @@ class Stats:
         self.dir_to_user_map    = defaultdict(str)
         self.image_to_class_map = defaultdict(list)
         self.ref_user_map       = defaultdict(defaultdict)
+
+    def __str__(self):
+        return str(self.__dict__)
 
 
 class BboxList:
@@ -73,24 +79,6 @@ class BboxList:
     def filter_visible_users(self, bbox_obj_list, visible_users):
         items = []
         for item in bbox_obj_list:
-            logging.info(f"item = {item}")
-            logging.info(f"dir                    ={item.dir}")
-            logging.info(f"file                   ={item.file }")
-            logging.info(f"image                  ={item.image }")
-            logging.info(f"bbox                   ={item.bbox }")
-            logging.info(f"class_base             ={item.class_base }")
-            logging.info(f"class_type             ={item.class_type }")
-            logging.info(f"difficult              ={item.difficult  }")
-            logging.info(f"meristem               ={item.meristem }")
-            logging.info(f"has_associated_inner   ={item.has_associated_inner }")
-            logging.info(f"iou                    ={item.iou }")
-            logging.info(f"associated_user        ={item.associated_user }")
-            logging.info(f"warning                ={item.warning }")
-            if not getattr(item, "user", None):
-                item.user = self.stats.dir_to_user_map[item.dir]
-
-            logging.info(f"user                   ={item.user }")
-
             if visible_users[item.user]:
                 items.append(item)
         return items
@@ -112,6 +100,7 @@ class BboxList:
         self.stats.dir_list    = self.stats.dir_to_user_map.keys()
         self.stats.image_to_class_map = self.get_image_to_class_map()
         self.update_user_key_in_objects()
+        import pdb; pdb.set_trace()
 
     def get_image_list(self):
         """
