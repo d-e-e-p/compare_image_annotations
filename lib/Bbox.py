@@ -100,7 +100,7 @@ class BboxList:
         self.stats.dir_list    = self.stats.dir_to_user_map.keys()
         self.stats.image_to_class_map = self.get_image_to_class_map()
         self.update_user_key_in_objects()
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
 
     def get_image_list(self):
         """
@@ -161,7 +161,6 @@ class BboxList:
 
     def get_best_ref_user(self, image, class_base):
         ref_user = self.stats.ref_user_map[image][class_base]
-        logging.info(f" ref_user = {ref_user} for {image} {class_base}")
         return ref_user
 
 

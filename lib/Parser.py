@@ -23,8 +23,10 @@ class Parser:
         for path in xml_path:
             for xml in glob(os.path.join(path, '*' + xml_ext)):
                 #logging.info(f"-> parsing xml file: {xml}")
-                print(f"    -> loading xml file: {xml}")
-                bbl.bbox_obj_list.extend(self.parse_xml_file(path, xml, check_level))
+                print(f"     -> loading: {xml}", end='')
+                bbox_list = self.parse_xml_file(path, xml, check_level)
+                bbl.bbox_obj_list.extend(bbox_list)
+                print(f" ({len(bbox_list)} boxes)")
 
 
     def collapse_class_names(self, class_base):

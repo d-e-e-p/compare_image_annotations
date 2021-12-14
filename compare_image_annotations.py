@@ -10,6 +10,9 @@ import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import argparse
 import logging
+import colorama
+from colorama import Fore, Back, Style
+
 
 sys.tracebacklimit = None
 
@@ -89,38 +92,43 @@ def setup_logging(args):
 
 def main(): 
 
-    print(f"{__appnane__}: version {VERSION} build {BUILD_DATE}\n")
+    #colorama.init(autoreset=True)
+    colorama.init(autoreset=False)
+
+    print()
+    print(Style.BRIGHT + Fore.CYAN + Back.BLACK, end='')
+    print(f"{__appnane__}: version {VERSION} build {BUILD_DATE}")
+    print(Style.RESET_ALL)
 
     args = parse_args()
 
     setup_logging(args)
-    logging.debug(args)
     logging.info(args)
-    logging.warning(args)
-    logging.error(args)
 
     # return if validate fails to find dirs
     if err := validate_args(args):
         return err
 
+    col = Fore.BLACK + Back.CYAN
+
     bbl = BboxList()
-    print("    0 Loading xml:")
+    print(f"    0/5 {col} loading xml " + Style.RESET_ALL)
     Parser(bbl, args)
     logging.info(bbl)
     bbl.update_stats()
-    print("    1/5 associating outer with meristem")
+    print(f"    1/5 {col} associating outer with meristem " + Style.RESET_ALL)
     bbl.associate_stem_with_outer()
-    print("    2/5 computing IOU")
+    print(f"    2/5 {col} computing IOU " + Style.RESET_ALL)
     bbl.compute_iou_for_each_annotation()
-    print("    3/5 finding potential mis-labels")
+    print(f"    3/5 {col} finding potential mis-labels " + Style.RESET_ALL)
     bbl.locate_potential_mislabel()
-    print("    4/5 saving report plots")
+    print(f"    4/5 {col} saving report plots " + Style.RESET_ALL)
     pl = Plotter(bbl, args)
-    print("    5/5 loading gui")
+    print(f"    5/5 {col} loading gui " + Style.RESET_ALL)
 
     app, _win = run_main_gui(bbl, pl, args)
     return app.exec_()
-print("    done")
+    print(f"    done " + Style.RESET_ALL)
 
 
 

@@ -7,7 +7,7 @@ import datetime
 
 bd = datetime.datetime.now()
 auth = "deep@tensorfield.ag"
-vers = "1.8"
+vers = "2.0"
 
 # Write version info into _constants.py resource file
 with open('lib/constants.py', 'w') as f:
