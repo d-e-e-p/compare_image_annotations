@@ -73,6 +73,24 @@ class BboxList:
     def filter_visible_users(self, bbox_obj_list, visible_users):
         items = []
         for item in bbox_obj_list:
+            logging.info(f"item = {item}")
+            logging.info(f"dir                    ={item.dir}")
+            logging.info(f"file                   ={item.file }")
+            logging.info(f"image                  ={item.image }")
+            logging.info(f"bbox                   ={item.bbox }")
+            logging.info(f"class_base             ={item.class_base }")
+            logging.info(f"class_type             ={item.class_type }")
+            logging.info(f"difficult              ={item.difficult  }")
+            logging.info(f"meristem               ={item.meristem }")
+            logging.info(f"has_associated_inner   ={item.has_associated_inner }")
+            logging.info(f"iou                    ={item.iou }")
+            logging.info(f"associated_user        ={item.associated_user }")
+            logging.info(f"warning                ={item.warning }")
+            if not getattr(item, "user", None):
+                item.user = self.stats.dir_to_user_map[item.dir]
+
+            logging.info(f"user                   ={item.user }")
+
             if visible_users[item.user]:
                 items.append(item)
         return items
@@ -155,7 +173,7 @@ class BboxList:
 
     def get_best_ref_user(self, image, class_base):
         ref_user = self.stats.ref_user_map[image][class_base]
-        #logging.info(f" ref_user = {ref_user} for {image} {class_base}")
+        logging.info(f" ref_user = {ref_user} for {image} {class_base}")
         return ref_user
 
 

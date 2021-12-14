@@ -1796,6 +1796,8 @@ class MainWindow(QMainWindow, WindowMixin):
             logging.info(f"get best ref for {imgName}, {class_list[0]}")
             self.ref_user = self.bbl.get_best_ref_user(imgName, class_list[0])
             # update widget as well..assume order of user_list
+            if not self.ref_user:
+                return
             logging.info(f"self.ref_user = {self.ref_user}")
             index = list(self.bbl.stats.user_list).index(self.ref_user)
             logging.info(f"index = {index}")
