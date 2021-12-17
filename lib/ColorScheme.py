@@ -34,7 +34,15 @@ class ColorScheme():
         col = ['#FFA700', '#FFF700', '#32CD32']
         col = "#c8a999  #bdc0c8  #00fdc2  #8caeff  #00ff00  #ff9248  #f97eff  #ffe7a1  #ff908e".split()
         col = ['#B0BF1A', '#3DDC84', '#FF91AF', '#66FF00', '#FFAA1D'] # de=21
-        #return col
+        col = """
+#10E7FC
+#FFB9FF
+#B2FF18
+#F3FF12
+#FFC81C
+#17FF57
+""".split()
+        return col
 
         key = palletname.split('_')[0]
            

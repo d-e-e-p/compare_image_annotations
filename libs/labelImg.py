@@ -325,6 +325,7 @@ class MainWindow(QMainWindow, WindowMixin):
         }
         self.scroll_area = scroll
         self.canvas.scrollRequest.connect(self.scroll_request)
+        self.canvas.scrollRequestZoom.connect(self.scroll_request_zoom)
 
         self.canvas.newShape.connect(self.new_shape)
         self.canvas.shapeMoved.connect(self.set_dirty)
@@ -1092,6 +1093,33 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             # self.canvas.undoLastLine()
             self.canvas.reset_all_lines()
+
+    # https://stackoverflow.com/questions/1736015/debugging-a-pyqt4-app
+    def debug_trace(self):
+        '''Set a tracepoint in the Python debugger that works with Qt'''
+        from PyQt5.QtCore import pyqtRemoveInputHook
+
+        from pdb import set_trace
+        pyqtRemoveInputHook()
+        set_trace()
+        # QtCore.pyqtRestoreInputHook()
+
+    def scroll_request_zoom(self, absolute, orientation):
+        bar = self.scroll_bars[orientation]
+        logging.info(f"current bar = {bar} p={orientation} new value = {absolute}")
+        logging.info(f"current bar = {str(bar.__dict__)} new value = {absolute}")
+        logging.info(f"current bar val = {bar.value()}") 
+        logging.info(f"current bar ps = {bar.pageStep()}") 
+        logging.info(f"current bar min = {bar.minimum()}") 
+        logging.info(f"current bar max = {bar.maximum()}") 
+        logging.info(f"current bar pox = {bar.sliderPosition()}") 
+        for i in range(100):
+            bar.setValue(i)
+            logging.info(f"current bar val = {bar.value()}") 
+            self.canvas.update() 
+            self.canvas.update() 
+        #self.debug_trace()
+
 
     def scroll_request(self, delta, orientation):
         units = - delta / (8 * 15)

@@ -3,8 +3,8 @@ from libs.shape import Shape
 from libs.utils import distance
 
 from PyQt5.QtGui import QBrush, QColor, QCursor, QPainter, QPixmap
-from PyQt5.QtCore import QPoint, QPointF, Qt, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QMenu, QWidget
+from PyQt5.QtCore import QPoint, QPointF, Qt, pyqtSignal, QRect, QSize
+from PyQt5.QtWidgets import QApplication, QMenu, QWidget, QRubberBand
 
 CURSOR_DEFAULT = Qt.CursorShape.ArrowCursor
 CURSOR_POINT   = Qt.CursorShape.PointingHandCursor
@@ -20,6 +20,7 @@ import logging
 class Canvas(QWidget):
     zoomRequest = pyqtSignal(int)
     scrollRequest = pyqtSignal(int, int)
+    scrollRequestZoom = pyqtSignal(int, int)
     newShape = pyqtSignal()
     selectionChanged = pyqtSignal(bool)
     shapeMoved = pyqtSignal()
@@ -67,6 +68,10 @@ class Canvas(QWidget):
         # initialisation for panning
         self.pan_initial_pos = QPoint()
 
+        # init for zooming
+        self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
+        self.origin = QPoint()
+
     def set_drawing_color(self, qcolor):
         self.drawing_line_color = qcolor
         self.drawing_rect_color = qcolor
@@ -85,6 +90,27 @@ class Canvas(QWidget):
 
     def drawing(self):
         return self.mode == self.CREATE
+
+    def zooming(self):
+        return self.zoom_window
+
+    def set_zooming(self, value=True):
+        self.zoom_window = value
+
+    def get_zoom_scale(self, rect):
+        s = self.scale
+        w, h = self.pixmap.width() * s, self.pixmap.height() * s
+        ws = rect.width()
+        hs = rect.height()
+
+        scalex = ws/w
+        scaley = hs/h
+
+        scale = int(min(scalex, scaley) * 100)
+        logging.info(f"w,h = {w},{h} but ws={ws}, {hs} so scale = {scale}")
+        return scale
+        
+
 
     def editing(self):
         return self.mode == self.EDIT
@@ -117,6 +143,21 @@ class Canvas(QWidget):
         if window.file_path is not None:
             self.parent().window().label_coordinates.setText(
                 'X: %d; Y: %d' % (pos.x(), pos.y()))
+
+        if self.zooming():
+            if not self.origin.isNull():
+                rect = QRect(self.origin, ev.pos()).normalized()
+                self.rubberBand.setGeometry(QRect(self.origin, ev.pos()).normalized())
+                logging.info(f" from={self.origin} to={ev.pos()} rect={rect}")
+                point = self.offset_to_box(rect)
+                logging.info(f" offset point = {point} current = {self.current}")
+                scale = self.get_zoom_scale(rect)
+                #self.scale = 0.01 * scale
+                # pan
+                self.scrollRequestZoom.emit(point.x(), Qt.Horizontal)
+                self.scrollRequestZoom.emit(point.y(), Qt.Vertical)
+                self.adjustSize()
+                self.update()
 
         # Polygon drawing.
         if self.drawing():
@@ -261,6 +302,9 @@ class Canvas(QWidget):
         if ev.button() == Qt.LeftButton:
             if self.drawing():
                 self.handle_drawing(pos)
+            elif self.zooming():
+                logging.debug(f"handle_zoommig {ev.pos()} pos={pos}")
+                self.handle_zooming(ev.pos())
             else:
                 selection = self.select_shape_point(pos)
                 self.prev_point = pos
@@ -276,6 +320,12 @@ class Canvas(QWidget):
         self.update()
 
     def mouseReleaseEvent(self, ev):
+
+        if self.zooming():
+            if ev.button() == Qt.LeftButton:
+                self.rubberBand.hide()
+                self.set_zooming(False)
+
         if ev.button() == Qt.RightButton:
             menu = self.menus[bool(self.selected_shape_copy)]
             self.restore_cursor()
@@ -320,29 +370,11 @@ class Canvas(QWidget):
             self.repaint()
 
     def handle_zooming(self, pos):
-        logging.info(f"handle_zoommig {pos} current={self.current}")
-        if self.current and self.current.reach_max_points() is False:
-            logging.info(f"current={self.current} masse = {self.current.reach_max_points()}")
-            init_pos = self.current[0]
-            min_x = init_pos.x()
-            min_y = init_pos.y()
-            target_pos = self.line[1]
-            max_x = target_pos.x()
-            max_y = target_pos.y()
-            self.current.add_point(QPointF(max_x, min_y))
-            self.current.add_point(target_pos)
-            self.current.add_point(QPointF(min_x, max_y))
-            self.finalise()
-            logging.info(f"init = {init_pos} tar = {target_pos}")
-        elif not self.out_of_pixmap(pos):
-            self.current = Shape()
-            self.current.add_point(pos)
-            self.line.points = [pos, pos]
-            self.set_hiding()
-            self.drawingPolygon.emit(True)
-            self.update()
-            logging.info(f"draw line {pos}")
-
+        #self.origin = pos.toPoint()
+        self.origin = pos
+        logging.info(f"handle_zoommig {self.origin} current={self.current}")
+        self.rubberBand.setGeometry(QRect(self.origin, QSize()))
+        self.rubberBand.show()
 
     def handle_drawing(self, pos):
         logging.info(f"handle_drawing {pos}")
@@ -586,6 +618,20 @@ class Canvas(QWidget):
         """Convert from widget-logical coordinates to painter-logical coordinates."""
         return point / self.scale - self.offset_to_center()
 
+    def offset_to_box(self, rect ):
+
+        return rect.center()
+
+        s = self.scale
+        w, h = self.pixmap.width() * s, self.pixmap.height() * s
+        ws, hs = rect.size()
+        
+        area = super(Canvas, self).size()
+        aw, ah = area.width(), area.height()
+        x = (aw - w) / (2 * s) if aw > w else 0
+        y = (ah - h) / (2 * s) if ah > h else 0
+        return QPointF(x, y)
+
     def offset_to_center(self):
         s = self.scale
         area = super(Canvas, self).size()
@@ -603,7 +649,6 @@ class Canvas(QWidget):
         logging.info(f"icurrent = {self.current}")
         assert self.current
         if self.zoom_window:
-            logging.info(f"starting to zoom")
             logging.info(f"{self.current.points}")
             self.zoom_window = False
             return
