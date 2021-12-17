@@ -190,9 +190,10 @@ image = {image_name} class = {cls}
        """
        logging.info(f"obj_list: = {obj_list:}")
        for obj in obj_list:
-            missing_users = set(self.bbl.stats.user_list).difference(obj.associated_user)
+            missing_users = list(set(self.bbl.stats.user_list).difference(obj.associated_user))
             logging.info(f"missing_users1 = {missing_users}")
-            missing_users.remove(dset.ref_user)
+            if dset.ref_user in missing_users:
+                missing_users.remove(dset.ref_user)
             logging.info(f"missing_users2 = {missing_users}")
             # remove not visible
             missing_users = list(filter(lambda user: dset.visible_users[user], missing_users))
@@ -273,14 +274,14 @@ image = {image_name} class = {cls}
         # only for outer
 
         logging.info(f" before filter: {obj_list}")
-        for obj in obj_list:
-            logging.info(f" before filter: n={obj.user} c={obj.class_type}")
+        #for obj in obj_list:
+        #    logging.info(f" before filter: n={obj.user} c={obj.class_type}")
         obj_list_f = self.bbl.filter(obj_list, 
                 user = dset.ref_user, 
                 class_type='outer')
         logging.info(f" after filter: {obj_list_f}")
-        for obj in obj_list_f:
-            logging.info(f" after filter: n={obj.user} c={obj.class_type}")
+        #for obj in obj_list_f:
+        #    logging.info(f" after filter: n={obj.user} c={obj.class_type}")
         self.mark_boxes_in_ref_missing_in_user(img, dset, obj_list_f)
 
         # draw a key on top left
