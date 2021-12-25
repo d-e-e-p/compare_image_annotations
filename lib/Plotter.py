@@ -22,6 +22,9 @@ from lib.ColorScheme import ColorScheme
 
 import pudb
 
+sys.tracebacklimit = None
+
+
 class DrawObject(object):
     def __init__(self, image, class_base, ref_user, visible_types, visible_users, iou_filter_value,
             color_pallet, adjust_background, adjust_foreground):
@@ -83,7 +86,7 @@ class Plotter:
 
             else:
                 logging.error(f" image file missing: expecting {file_name}")
-                exit(-1)
+                sys.exit(-1)
 
     def add_margins(self):
         for image_name in self.img_list:
@@ -108,7 +111,7 @@ class Plotter:
         else:
             logging.info(f" font_path missing : {font_path}")
             print(f" font_path missing : {font_path}")
-            exit(-1)
+            sys.exit(-1)
 
         #import pdb; pdb.set_trace()
         try:

@@ -21,6 +21,7 @@ from lib.Bbox    import BboxList
 from lib.Parser  import Parser
 from lib.Plotter import Plotter
 from lib.constants import VERSION, BUILD_DATE, AUTHOR
+from lib.CustomFormatter import CustomFormatter
 
 from libs.labelImg import run_main_gui
 
@@ -75,15 +76,16 @@ def setup_logging(args):
     stream_handler = logging.StreamHandler()
     if args.verbose:
         stream_handler.setLevel(logging.DEBUG)
-        stream_handler.setFormatter(format_long)
+        stream_handler.setFormatter(CustomFormatter(type='long',color=True))
+
     else:
         stream_handler.setLevel(logging.WARNING)
-        stream_handler.setFormatter(format_short)
+        stream_handler.setFormatter(CustomFormatter(type='short',color=True))
     log.addHandler(stream_handler)
 
     logFilePath = os.path.join(args.out, "debug.log")
     file_handler = logging.FileHandler(filename=logFilePath)
-    file_handler.setFormatter(format_long)
+    file_handler.setFormatter(CustomFormatter(type='long',color=False))
     file_handler.setLevel(logging.DEBUG)
     log.addHandler(file_handler)
 
