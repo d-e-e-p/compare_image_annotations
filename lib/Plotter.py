@@ -76,6 +76,7 @@ class Plotter:
     # make sure all images exist in img_dir
     def read_images(self, img_dir):
         img_ext = ".jpg"
+        missing_images = False
         for image in self.img_list:
             file_name = join(img_dir, image + img_ext)
             if (exists(file_name)):
@@ -85,7 +86,10 @@ class Plotter:
                     logging.warning(f" image file not actually an image: {file_name}")
 
             else:
-                logging.error(f" image file missing: expecting {file_name}")
+                logging.error(f"image file missing: expecting {file_name}")
+                missing_images = True
+
+            if missing_images:
                 sys.exit(-1)
 
     def add_margins(self):
