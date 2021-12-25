@@ -35,6 +35,8 @@ class Parser:
         """
         if 'carrot' in class_base:
             return 'carrot'
+        elif 'unknown' in class_base:
+            return 'unknown'
         else:
             return 'weed'
 
