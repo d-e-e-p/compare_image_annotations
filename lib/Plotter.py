@@ -89,8 +89,8 @@ class Plotter:
                 logging.error(f"image file missing: expecting {file_name}")
                 missing_images = True
 
-            if missing_images:
-                sys.exit(-1)
+        if missing_images:
+            sys.exit(-1)
 
     def add_margins(self):
         for image_name in self.img_list:
