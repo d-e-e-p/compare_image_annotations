@@ -33,12 +33,13 @@ class Parser:
         """
         easy mode
         """
-        if 'carrot' in class_base:
-            return 'carrot'
-        elif 'unknown' in class_base:
-            return 'unknown'
-        else:
-            return 'weed'
+        known_types = "carrot spinach unknown".split()
+        for type in known_types:
+            if type in class_base:
+                return type
+
+        # not a known type? must be a weed
+        return 'weed'
 
     def parse_xml_file(self, dir, file, check_level):
 #    """
