@@ -86,11 +86,14 @@ class BboxList:
     def filter_by_iou_value(self, bbox_obj_list, ref_user, iou_filter_value):
         items = []
         iou_threshold = iou_filter_value / 10.0
+        # don't prube ref user
         for item in bbox_obj_list:
             if item.user != ref_user:
                 #logging.info(f"iou = ref_user = {ref_user} list = {item.iou}")
                 if item.iou[ref_user] < iou_threshold: 
                     items.append(item)
+            else:
+                items.append(item)
         return items
 
     def update_stats(self):
