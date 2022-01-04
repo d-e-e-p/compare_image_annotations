@@ -94,10 +94,17 @@ class Parser:
             ymax = int(bbox.find('ymax').text)
 
             # carrot_outer -> carrot , outer
-            class_base, class_type_name = class_name.rsplit('_', 1)
+            if '_' in class_name:
+                class_base, class_type_name = class_name.rsplit('_', 1)
+            else:
+                logging.warning(f"class name should end in _outer or _meristem: {class_name}")
+                logging.warning(f"look at file: {file}")
+                class_base = class_name
+                class_type_name = 'outer'
+
             if class_type_name != 'outer' and class_type_name != 'meristem':     
-                logging.error(f"ERROR: class name should end in _outer or _meristem: {class_name}")
-                logging.error(f"ERROR: look at file: {file}")
+                logging.error(f"class name should end in _outer or _meristem: {class_name}")
+                logging.error(f"look at file: {file}")
             else:
                 class_type = class_type_name
                 if class_type_name == "meristem":
