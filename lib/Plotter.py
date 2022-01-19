@@ -81,9 +81,12 @@ class Plotter:
             file_name = join(img_dir, image + img_ext)
             if (exists(file_name)):
                 try:
-                    self.source_img[image] = Image.open(file_name)
+                    ih = Image.open(file_name)
+                    self.source_img[image] = ih.copy()
+                    ih.close()
+                    
                 except IOError:
-                    logging.warning(f" image file not actually an image: {file_name}")
+                    logging.warning(f" IO error reading image: {file_name}")
 
             else:
                 logging.error(f"image file missing: expecting {file_name}")
@@ -336,6 +339,10 @@ image = {image_name} class = {cls}
         txt = self.get_text_for_report_line(max_username, 0, 0, u_count, max_username)
         cell_width, cell_height = img.textsize(txt, self.fnt['bold'])
         max_txt_len = len(txt) # needed much later
+        logging.info(f"based on txt={txt}")
+        logging.info(f"max_txt_len={max_txt_len}")
+        logging.info(f"cell_width={cell_width}")
+
 
         # ok, now compute total needed space based on that
         linespace = 1.5 * cell_height

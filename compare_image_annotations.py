@@ -38,6 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='compare annotations in xml format between different image label sets')
     parser.add_argument('--verbose', action='store_true')
+    parser.add_argument('--prune',   action='store_true')
     parser.add_argument('--check', choices=['relaxed', 'normal', 'strict'], default='normal')
     parser.add_argument('--img', required=True, help='image directory')
     parser.add_argument('--xml', required=True, help='list of xml directories', nargs='+')

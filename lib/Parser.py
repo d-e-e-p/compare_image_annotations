@@ -6,27 +6,53 @@ import os
 from collections import defaultdict
 from glob import glob
 import logging
+import sys
+from pathlib import Path
+
 
 from lib.Bbox   import Bbox
 from lib.Bbox   import BboxList
 
 class Parser:
     def __init__(self, bbl, args) :
-        self.parse_xml_dirs(bbl, args.xml, args.check)
+        stem2files = self.get_xml_with_mutiple_versions(args.xml, args.prune)
+        self.parse_xml_dirs(bbl, stem2files, args.check)
 
-
-    def parse_xml_dirs(self, bbl,  xml_path, check_level):
+    def get_xml_with_mutiple_versions(self, xml_path, prune):
         """
-        get the object in each xml file under xml_path
+        same xml has more than 1 version
         """
+        files = []
+        stem2files = defaultdict(list)
         xml_ext = ".xml"
         for path in xml_path:
             for xml in glob(os.path.join(path, '*' + xml_ext)):
-                #logging.info(f"-> parsing xml file: {xml}")
-                print(f"     -> loading: {xml}", end='')
-                bbox_list = self.parse_xml_file(path, xml, check_level)
+                stem = Path(xml).stem
+                stem2files[stem].append(xml)
+        logging.info(f"{stem2files}")
+
+        # remove entries with only 1 xml
+        if prune:
+            stem2files = dict(filter(lambda elem: len(elem[1]) > 1, stem2files.items()))
+
+        logging.info(f"{prune} : {stem2files}")
+
+        #sys.exit(0)
+        return stem2files
+
+
+
+    def parse_xml_dirs(self, bbl,  stem2files, check_level):
+        """
+        get the object in each xml file under xml_path
+        """
+        for stem, files in stem2files.items():
+            for file in files:
+                print(f"     -> loading: {file}", end='')
+                bbox_list = self.parse_xml_file(stem, file, check_level)
                 bbl.bbox_obj_list.extend(bbox_list)
                 print(f" ({len(bbox_list)} boxes)")
+
 
 
     def collapse_class_names(self, class_base):
@@ -41,7 +67,7 @@ class Parser:
         # not a known type? must be a weed
         return 'weed'
 
-    def parse_xml_file(self, dir, file, check_level):
+    def parse_xml_file(self, stem, file, check_level):
 #    """
 #    parse xml file that looks like:
 #
@@ -78,7 +104,8 @@ class Parser:
         bbox_list = []
 
         folder   = root.find('folder').text
-        image    = root.find('filename').text.rsplit('.', 1)[0]
+        #image    = root.find('filename').text.rsplit('.', 1)[0]
+        image    = stem
         path     = root.find('path').text
         img_size = root.find('size')
         objects  = root.findall('object')
@@ -113,6 +140,7 @@ class Parser:
                 if check_level == "relaxed": 
                     class_base = self.collapse_class_names(class_base)
 
+                dir = str(Path(file).parent)
                 bbox = Bbox(dir, file, image,  class_base, class_type, difficult, [xmin, ymin, xmax, ymax])
                 bbox_list.append(bbox)
 
