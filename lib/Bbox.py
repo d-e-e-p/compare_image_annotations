@@ -335,6 +335,7 @@ class BboxList:
                     if max_iou_diff > iou_threshold['diff_class']:
                         # potential mis-label!
                         obj.warning = f"{obj.class_base} by {obj.user}\n{max_iou_userclass}"
-                        logging.info(obj.warning)
+                        txt = f"{image}: {obj.class_base} by {obj.user} vs {max_iou_userclass}"
+                        logging.info(txt)
             
     
