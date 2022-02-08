@@ -573,7 +573,8 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Application state.
         self.image = QImage()
-        self.file_path = ustr(default_filename)
+        #self.file_path = ustr(default_filename)
+        self.file_path = None
         self.last_open_dir = None
         self.recent_files = []
         self.max_recent = 7
@@ -584,6 +585,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # Add Chris
         self.difficult = False
 
+        """
         # Fix the compatible issue for qt4 and qt5. Convert the QStringList to python list
         if settings.get(SETTING_RECENT_FILES):
             if have_qstring():
@@ -591,6 +593,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.recent_files = [ustr(i) for i in recent_file_qstring_list]
             else:
                 self.recent_files = recent_file_qstring_list = settings.get(SETTING_RECENT_FILES)
+        """
 
         size = settings.get(SETTING_WIN_SIZE, QSize(600, 500))
         position = QPoint(0, 0)
@@ -627,13 +630,17 @@ class MainWindow(QMainWindow, WindowMixin):
             self.toggle_advanced_mode()
 
         # Populate the File menu dynamically.
-        self.update_file_menu()
+        #self.update_file_menu()
 
         # Since loading the file may take some time, make sure it runs in the background.
+        """
         if self.file_path and os.path.isdir(self.file_path):
             self.queue_event(partial(self.import_dir_images, self.file_path or ""))
         elif self.file_path:
             self.queue_event(partial(self.load_file, self.file_path or ""))
+        """
+        self.queue_event(self.import_filelist_images)
+        # bypass : assume we have a list of files already
 
         # Callbacks:
         self.zoom_widget.valueChanged.connect(self.paint_canvas)
@@ -843,6 +850,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def update_file_menu(self):
         curr_file_path = self.file_path
+        logging.info(f"curr_file_path = {self.file_path} recent={self.recent_files}")
 
         def exists(filename):
             return os.path.exists(filename)
@@ -1214,6 +1222,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def load_file(self, file_path=None):
         """Load the specified file, or the last opened file if None."""
+        logging.debug(f"loading {file_path} out of list {self.m_img_list}")
         self.reset_state()
         self.canvas.setEnabled(False)
         if file_path is None:
@@ -1224,19 +1233,22 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Fix bug: An  index error after select a directory when open a new file.
         unicode_file_path = ustr(file_path)
-        unicode_file_path = os.path.abspath(unicode_file_path)
+        #unicode_file_path = os.path.abspath(unicode_file_path)
         # Tzutalin 20160906 : Add file list and dock to move faster
         # Highlight the file item
         if unicode_file_path and self.file_list_widget.count() > 0:
+            logging.debug(f" testing for {unicode_file_path} in {self.m_img_list}")
             if unicode_file_path in self.m_img_list:
                 index = self.m_img_list.index(unicode_file_path)
                 file_widget_item = self.file_list_widget.item(index)
                 file_widget_item.setSelected(True)
                 self.file_list_widget.setCurrentItem(file_widget_item)
             else:
+                logging.debug(f"clearing...why?")
                 self.file_list_widget.clear()
                 self.m_img_list.clear()
 
+        logging.debug(f"loading {file_path} out of list {self.m_img_list}")
         if unicode_file_path and os.path.exists(unicode_file_path):
             if LabelFile.is_label_file(unicode_file_path):
                 try:
@@ -1482,6 +1494,36 @@ class MainWindow(QMainWindow, WindowMixin):
         self.last_open_dir = target_dir_path
         self.import_dir_images(target_dir_path)
 
+    def import_filelist_images(self):
+        """
+        load images from key in self.pl.source_img
+        """
+        if not self.may_continue():
+            logging.warning(f"self.may_continue = {self.may_continue()}")
+            #return
+
+        self.file_list_widget.clear()
+
+        for imgName, imgPath in self.bbl.stem2jpgs.items():
+            if self.bbl.stats.image_to_class_map[imgName]:
+                self.image_basename_to_path[imgName] = imgPath
+                self.path_to_image_basename[imgPath] = imgName
+        logging.info(f"self.image_basename_to_path = {self.image_basename_to_path}")
+
+        self.m_img_list = list(self.image_basename_to_path.values())
+        self.img_count = len(self.m_img_list)
+        logging.info(f"self.m_img_list = {self.m_img_list}")
+        self.open_next_image()
+        for imgPath in self.m_img_list:
+            imgName = self.path_to_image_basename[imgPath]
+            item = QListWidgetItem(imgName)
+            self.file_list_widget.addItem(item)
+
+        self.file_path = self.m_img_list[0]
+        self.add_recent_file(self.file_path)
+        logging.info(f"curr_file_path = {self.file_path} recent={self.recent_files}")
+
+
     def import_dir_images(self, dir_path):
         if not self.may_continue() or not dir_path:
             return
@@ -1576,6 +1618,7 @@ class MainWindow(QMainWindow, WindowMixin):
             if self.cur_img_idx + 1 < self.img_count:
                 self.cur_img_idx += 1
                 filename = self.m_img_list[self.cur_img_idx]
+        logging.debug(f"filename={filename} self.cur_img_idx={self.cur_img_idx} self.m_img_list={self.m_img_list}")
 
         if filename:
             self.load_file(filename)
@@ -1984,9 +2027,9 @@ def run_main_gui(bbl, pl, args):
     #app.setStyle('Fusion')
 
     # Usage : labelImg.py image classFile saveDir
-    logging.info(f" image dir: {args.img}")
-    logging.info(f" save  dir: {args.out}")
-    win = MainWindow(bbl, pl, args.img, args.out)
+    logging.info(f" data dir:  {args.data}")
+    logging.info(f" save dir:  {args.out}")
+    win = MainWindow(bbl, pl)
     win.show()
     return app, win
 

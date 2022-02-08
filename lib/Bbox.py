@@ -54,6 +54,8 @@ class BboxList:
     def __init__(self):
         self.bbox_obj_list = []
         # after every update to bbox_obj_list , stats needs to be regenerated
+        self.stem2xmls = defaultdict(list)
+        self.stem2jpgs = defaultdict(list)
         self.stats = Stats()
 
 

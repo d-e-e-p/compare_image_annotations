@@ -40,8 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--prune',   action='store_true')
     parser.add_argument('--check', choices=['relaxed', 'normal', 'strict'], default='normal')
-    parser.add_argument('--img', required=True, help='image directory')
-    parser.add_argument('--xml', required=True, help='list of xml directories', nargs='+')
+    parser.add_argument('--data', required=True, help='xml and image directories', nargs='+')
     parser.add_argument('--out', required=True, help='output directory')
 
     args = parser.parse_args()
@@ -58,8 +57,7 @@ def validate_args(args: argparse.Namespace):
         err = 1
     for xml in args.xml:
         if not os.path.isdir(xml):
-            logging.error(f' xml dir {xml} does not exist')
-            err = 1
+            logging.debug(f' xml dir {xml} does not exist')
 
     return err
 
@@ -109,16 +107,14 @@ def main():
     logging.info(args)
 
     # return if validate fails to find dirs
-    if err := validate_args(args):
-        return err
+    #if err := validate_args(args):
+    #    return err
 
     col = Fore.BLACK + Back.CYAN
 
     bbl = BboxList()
     print(f"    0/5 {col} loading xml " + Style.RESET_ALL)
     Parser(bbl, args)
-    logging.info(bbl)
-    bbl.update_stats()
     print(f"    1/5 {col} associating outer with meristem " + Style.RESET_ALL)
     bbl.associate_stem_with_outer()
     print(f"    2/5 {col} computing IOU " + Style.RESET_ALL)

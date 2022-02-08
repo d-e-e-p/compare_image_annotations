@@ -66,34 +66,41 @@ class Plotter:
         self.color_pallet  = "Bold" # initial pallet
         self.user_to_color = {}
         self.source_img = defaultdict(lambda: None)
-        self.img_list = bbl.get_image_list();
-        self.read_images(args.img)
+        self.img_list = bbl.get_image_list()
+        self.read_images()
         self.add_margins()
         self.assign_colors_to_users()
         self.fnt = self.get_fonts();
         self.plot_iou_boxes(bbl, args.out)
 
     # make sure all images exist in img_dir
-    def read_images(self, img_dir):
-        img_ext = ".jpg"
-        missing_images = False
+    def read_images(self):
+        logging.info(f"stem2jpgs = {self.bbl.stem2jpgs}")
+        for image, file_name in self.bbl.stem2jpgs.items():
+            logging.debug(f"{image} -> {file_name}")
+
+        # see https://stackoverflow.com/questions/11029717/how-do-i-disable-log-messages-from-the-requests-library
+        #print(logging.warning(logging.Logger.manager.loggerDict))
+        logging.getLogger('PIL.Image').setLevel(logging.CRITICAL)
+        logging.getLogger('PIL.ImagePlugin').setLevel(logging.CRITICAL)
+
+        for image, file_name in self.bbl.stem2jpgs.items():
+            if image in self.img_list:
+                ih = Image.open(file_name)
+                self.source_img[image] = ih.copy()
+                ih.close()
+                        
+
+            # check to make sure all needed images exist
+        err_exit = False
         for image in self.img_list:
-            file_name = join(img_dir, image + img_ext)
-            if (exists(file_name)):
-                try:
-                    ih = Image.open(file_name)
-                    self.source_img[image] = ih.copy()
-                    ih.close()
-                    
-                except IOError:
-                    logging.warning(f" IO error reading image: {file_name}")
+            if self.source_img[image] is None:
+                logging.error(f"missing image file for {image}")
+                err_exit = True
 
-            else:
-                logging.error(f"image file missing: expecting {file_name}")
-                missing_images = True
-
-        if missing_images:
+        if err_exit:
             sys.exit(-1)
+
 
     def add_margins(self):
         for image_name in self.img_list:
