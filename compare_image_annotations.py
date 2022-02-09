@@ -12,7 +12,9 @@ import argparse
 import logging
 import colorama
 from colorama import Fore, Back, Style
+import shlex
 
+from PyQt5.QtWidgets import (QLineEdit, QPushButton, QApplication, QVBoxLayout, QDialog)
 
 sys.tracebacklimit = None
 
@@ -24,6 +26,8 @@ from lib.constants import VERSION, BUILD_DATE, AUTHOR
 from lib.CustomFormatter import CustomFormatter
 
 from libs.labelImg import run_main_gui
+
+from libs.argsDialog import ArgsDialog, Results
 
 __author__      = 'deep@tensorfield.ag'
 __copyright__   = 'Copyright (C) 2021 - Tensorfield Ag '
@@ -40,26 +44,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--prune',   action='store_true')
     parser.add_argument('--check', choices=['relaxed', 'normal', 'strict'], default='normal')
-    parser.add_argument('--data', required=True, help='xml and image directories', nargs='+')
-    parser.add_argument('--out', required=True, help='output directory')
+    parser.add_argument('--data', required=False, help='xml and image directories', nargs='+')
+    parser.add_argument('--out', required=False, help='output directory')
 
-    args = parser.parse_args()
-    return args
+    return parser
 
 def validate_args(args: argparse.Namespace):
 
-    err = 0
-    if not os.path.isdir(args.img):
-        logging.error(f' img dir {args.img} does not exist')
-        err = 1
-    if not os.path.isdir(args.out):
-        logging.error(f' out dir {args.out} does not exist')
-        err = 1
-    for xml in args.xml:
-        if not os.path.isdir(xml):
-            logging.debug(f' xml dir {xml} does not exist')
+    valid = True
+    if not args.out:
+        valid = False
+    else:
+        if not os.path.isdir(args.out):
+            logging.debug(f' out dir {args.out} does not exist')
+            valid = False
+    if not args.data:
+        valid = False
+    else:
+        for data in args.data:
+            if not os.path.isdir(data):
+                valid = False
+                logging.error(f' data dir {data} does not exist')
 
-    return err
+    return valid
 
 def setup_logging(args):
 
@@ -90,6 +97,14 @@ def setup_logging(args):
 
     return log
 
+def run_args_gui():
+    app = QApplication(sys.argv)
+    res = Results()
+    args_dialog  = ArgsDialog( text="Enter Notes", res=res )
+    args_dialog.show()
+    #note_text = note_dialog.pop_up(msg)
+    app.exec()
+    return res.args
 
 def main(): 
 
@@ -101,7 +116,12 @@ def main():
     print(f"{__appnane__}: version {VERSION} build {BUILD_DATE}")
     print(Style.RESET_ALL)
 
-    args = parse_args()
+    parser = parse_args()
+    args = parser.parse_args()
+    # use gui if invalid args, otherwise proceed
+    if not validate_args(args):
+        argString = run_args_gui()
+        args = parser.parse_args(shlex.split(argString))
 
     setup_logging(args)
     logging.info(args)

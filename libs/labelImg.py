@@ -166,6 +166,11 @@ class MainWindow(QMainWindow, WindowMixin):
         for user in self.bbl.stats.user_list:
             self.user_button[user] = QCheckBox(user)
             self.user_button[user].setChecked(True)
+            self.user_button[user].setChecked(True)
+            self.user_button[user].setEnabled(False)
+            # self.cb.setStyleSheet("color: black")
+            # self.cb.setAttribute(QtCore.Qt.WA_AlwaysShowToolTips)
+            # self.cb.setToolTip ('my checkBox')
             self.user_button[user].stateChanged.connect(self.draw_iou_boxes)
             list_layout.addWidget(self.user_button[user])
 
@@ -1222,7 +1227,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def load_file(self, file_path=None):
         """Load the specified file, or the last opened file if None."""
-        logging.debug(f"loading {file_path} out of list {self.m_img_list}")
         self.reset_state()
         self.canvas.setEnabled(False)
         if file_path is None:
@@ -1248,7 +1252,6 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.file_list_widget.clear()
                 self.m_img_list.clear()
 
-        logging.debug(f"loading {file_path} out of list {self.m_img_list}")
         if unicode_file_path and os.path.exists(unicode_file_path):
             if LabelFile.is_label_file(unicode_file_path):
                 try:
@@ -1321,6 +1324,16 @@ class MainWindow(QMainWindow, WindowMixin):
             if self.label_list.count():
                 self.label_list.setCurrentItem(self.label_list.item(self.label_list.count() - 1))
                 self.label_list.item(self.label_list.count() - 1).setSelected(True)
+
+            # get active users and enable them
+            imgName = Path(self.file_path).stem
+            active_users = self.bbl.stats.image_to_active_users_map[imgName]
+            for user in self.bbl.stats.user_list:
+                if user in active_users:
+                    self.user_button[user].setEnabled(True)
+                else:
+                    self.user_button[user].setEnabled(False)
+
 
             self.canvas.setFocus(True)
             self.draw_iou_boxes()
@@ -1853,10 +1866,10 @@ class MainWindow(QMainWindow, WindowMixin):
         if not class_list:
             return
         self.class_list_widget.clear()
-        logging.info(f"class list widget clear")
+        logging.debug(f"class list widget clear")
         for cls in class_list:
             self.class_list_widget.addItem(cls)
-        logging.info(f"added classes: {class_list}")
+        logging.debug(f"added classes: {class_list}")
         # make one of the items in the list selected
         self.class_list_widget.setCurrentRow(0)
         # also make it setselected to true
@@ -1950,8 +1963,12 @@ class MainWindow(QMainWindow, WindowMixin):
         self.ref_user = self.ref_user_box.currentText()
 
         visible_users = {}
+        active_users = self.bbl.stats.image_to_active_users_map[image]
         for user in self.bbl.stats.user_list:
-            visible_users[user] = self.user_button[user].isChecked()
+            if user in active_users:
+                visible_users[user] = self.user_button[user].isChecked()
+            else:
+                visible_users[user] = False
 
         # class type
         visible_types = {}

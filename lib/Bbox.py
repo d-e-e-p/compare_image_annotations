@@ -44,6 +44,8 @@ class Stats:
         self.user_to_dir_map    = defaultdict(str)
         self.dir_to_user_map    = defaultdict(str)
         self.image_to_class_map = defaultdict(list)
+        self.image_to_active_users_map = defaultdict(list)
+
         self.ref_user_map       = defaultdict(defaultdict)
 
     def __str__(self):
@@ -105,6 +107,7 @@ class BboxList:
         self.stats.dir_list    = self.stats.dir_to_user_map.keys()
         self.stats.image_to_class_map = self.get_image_to_class_map()
         self.update_user_key_in_objects()
+        self.stats.image_to_active_users_map = self.get_image_to_active_users_map()
         #import pdb; pdb.set_trace()
 
     def get_image_list(self):
@@ -168,6 +171,20 @@ class BboxList:
         ref_user = self.stats.ref_user_map[image][class_base]
         return ref_user
 
+    def get_image_to_active_users_map(self):
+        """
+        active users in each image
+        TODO: faster way to get this..
+        """
+        image_to_active_users_map = defaultdict(list)
+        for obj in self.bbox_obj_list:
+            image_to_active_users_map[obj.image].append(obj.user)
+
+        for image in image_to_active_users_map.keys():
+            image_to_active_users_map[image] = sorted(set(image_to_active_users_map[image]))
+
+        logging.info(f" image_to_active_users_map= {image_to_active_users_map}")
+        return image_to_active_users_map
 
     def get_image_to_class_map(self):
         """
