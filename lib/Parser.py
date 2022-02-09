@@ -85,7 +85,7 @@ class Parser:
                             err_exit = True
 
         if err_exit:
-            exit(-1)
+            sys.exit(-1)
         logging.debug(self.bbl.stem2jpgs)
 
 

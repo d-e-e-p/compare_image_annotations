@@ -96,8 +96,8 @@ class ArgsDialog(QDialog):
         rpt_foldername  = self.rpt_foldername.text()
         data_foldername = self.data_foldername.text()
         args = ""
-        args += f" --out {rpt_foldername} "
-        args += f" --data {data_foldername} "
+        args += f" --out '{rpt_foldername}' "
+        args += f" --data '{data_foldername}' "
         for item in self.findChildren(QRadioButton):
             if item.isChecked():
                     args += f" --check {item.text()} "
