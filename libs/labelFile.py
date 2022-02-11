@@ -1,7 +1,7 @@
 # Copyright (c) 2016 Tzutalin
 # Create by TzuTaLin <tzu.ta.lin@gmail.com>
+from PySide6.QtGui import QImage
 
-from PyQt5.QtGui import QImage
 
 from base64 import b64encode, b64decode
 from libs.pascal_voc_io import PascalVocWriter
@@ -13,6 +13,7 @@ from enum import Enum
 import os.path
 import sys
 
+import logging
 
 class LabelFileFormat(Enum):
     PASCAL_VOC = 1
@@ -68,13 +69,20 @@ class LabelFile(object):
                                  image_shape, local_img_path=image_path)
         writer.verified = self.verified
 
+        logging.debug(f"shapes = {shapes}")
         for shape in shapes:
             points = shape['points']
             label = shape['label']
+            note  = shape['note']
+            if note:
+                logging.debug(f"added note element : {note}")
+            user  = shape['user']
+            if user:
+                logging.debug(f"added user element : {user}")
             # Add Chris
             difficult = int(shape['difficult'])
             bnd_box = LabelFile.convert_points_to_bnd_box(points)
-            writer.add_bnd_box(bnd_box[0], bnd_box[1], bnd_box[2], bnd_box[3], label, difficult)
+            writer.add_bnd_box(bnd_box[0], bnd_box[1], bnd_box[2], bnd_box[3], label, note, user, difficult)
 
         writer.save(target_file=filename)
         return

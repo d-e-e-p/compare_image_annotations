@@ -14,7 +14,7 @@ import colorama
 from colorama import Fore, Back, Style
 import shlex
 
-from PyQt5.QtWidgets import (QLineEdit, QPushButton, QApplication, QVBoxLayout, QDialog)
+from PySide6.QtWidgets import (QLineEdit, QPushButton, QApplication, QVBoxLayout, QDialog)
 
 sys.tracebacklimit = None
 
@@ -34,7 +34,7 @@ __copyright__   = 'Copyright (C) 2021 - Tensorfield Ag '
 __license__     = 'New BSD License - https://opensource.org/licenses/BSD-3-Clause'
 __maintainer__  = 'deep'
 __status__      = 'Development'
-__appnane__     = 'compare_image_annotations'
+__appname__     = 'compare_image_annotations'
 
 
 def parse_args() -> argparse.Namespace:
@@ -113,7 +113,7 @@ def main():
 
     print()
     print(Style.BRIGHT + Fore.CYAN + Back.BLACK, end='')
-    print(f"{__appnane__}: version {VERSION} build {BUILD_DATE}")
+    print(f"{__appname__}: version {VERSION} build {BUILD_DATE}")
     print(Style.RESET_ALL)
 
     parser = parse_args()
@@ -121,6 +121,11 @@ def main():
     # use gui if invalid args, otherwise proceed
     if not validate_args(args):
         argString = run_args_gui()
+        if argString is None:
+            print(Style.BRIGHT + Fore.GREEN + Back.BLACK, end='')
+            print(f"cancel--existing")
+            print(Style.RESET_ALL)
+            sys.exit(0)
         args = parser.parse_args(shlex.split(argString))
 
     setup_logging(args)

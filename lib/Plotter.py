@@ -290,7 +290,6 @@ image = {image_name} class = {cls}
         # mark missing box labels .. assume totals have been calculated
         # only for outer
 
-        logging.info(f" before filter: {obj_list}")
         #for obj in obj_list:
         #    logging.info(f" before filter: n={obj.user} c={obj.class_type}")
         obj_list_f = self.bbl.filter(obj_list, 

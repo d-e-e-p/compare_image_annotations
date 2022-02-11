@@ -1,7 +1,7 @@
 
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtWidgets import *
 
 BB = QDialogButtonBox
 
@@ -18,6 +18,7 @@ class ArgsDialog(QDialog):
         super(ArgsDialog, self).__init__(parent)
 
         self.res = res
+        self.res.args = None
         self.setWindowTitle("args for compare_image_annotations")
         self.resize(500,500)
 

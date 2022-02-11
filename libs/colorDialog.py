@@ -1,5 +1,5 @@
-#
-from PyQt5.QtWidgets import QColorDialog, QDialogButtonBox
+from PySide6.QtWidgets import QColorDialog, QDialogButtonBox
+
 
 BB = QDialogButtonBox
 

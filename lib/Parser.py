@@ -1,18 +1,32 @@
 """
 class that reads xml files and returns a list of bounding boxes annotations
 """
-import xml.etree.ElementTree as ET
-import os
-from collections import defaultdict
-from glob import glob
-import logging
 import sys
+import os
+from xml.etree import ElementTree
+from xml.etree.ElementTree import Element, SubElement
+from lxml import etree
+import codecs
 from pathlib import Path
-import filecmp
 
+from collections import Counter
+from collections import defaultdict
+from datetime import datetime
+from glob import glob
+import filecmp
+import logging
+import psutil
+
+from libs.constants import DEFAULT_ENCODING
+from libs.build_stamp import *
+
+XML_EXT = '.xml'
+ENCODE_METHOD = DEFAULT_ENCODING
 
 from lib.Bbox   import Bbox
 from lib.Bbox   import BboxList
+from libs.plantData import PLANT_NAMES, TYPE_NAMES, PLANT_TYPE_NAMES, PLANT_COLORS
+from libs.plantData import split_name_into_plant_and_type, has_valid_suffix
 
 class Parser:
     def __init__(self, bbl, args) :
@@ -55,6 +69,20 @@ class Parser:
         #sys.exit(0)
         return stem2files
 
+    # see https://stackoverflow.com/questions/22058048/hashing-a-file-in-python
+    # yeah we don't really need the optimization overhead for small image files...
+    def sha256sum(self, filename, bufsize=128 * 1024):
+        h = hashlib.sha256()
+        buffer = bytearray(bufsize)
+        # using a memoryview so that we can slice the buffer without copying it
+        buffer_view = memoryview(buffer)
+        with open(filename, 'rb', buffering=0) as f:
+            while True:
+                n = f.readinto(buffer_view)
+                if not n:
+                    break
+                h.update(buffer_view[:n])
+        return h.hexdigest()
 
     def parse_xml_dirs(self, stem2xmls, check_level):
         """
@@ -88,6 +116,33 @@ class Parser:
             exit(-1)
         logging.debug(self.bbl.stem2jpgs)
 
+    def fix_labels(self, file, text):
+        """
+        fix common problems with labels!
+        """
+        text = text.lower()
+        basename = Path(file).name
+        logging.debug(f" {basename}: fixing  {text}")
+        if '-' in text:
+            out = text.replace('-','_')
+            logging.info(f" {basename}: replaced dash so {text} -> {out}")
+            text = out
+
+        if '_meristem' in text:
+            out = text.replace('_meristem','_stem')
+            #logging.info(f" {basename}: replaced meristem so {text} -> {out}")
+            text = out
+
+        if not has_valid_suffix(text):
+            out = text + "_outer"
+            logging.info(f" {basename}: missing valid type suffix so assuming {text} -> {out}")
+            text = out
+
+        if text not in PLANT_TYPE_NAMES:
+            logging.warning(f" {basename}: label {text} not in standard label types: {PLANT_TYPE_NAMES}")
+
+        logging.debug(f" {basename}: returning  {text}")
+        return text
 
     def collapse_class_names(self, class_base):
         """
@@ -101,7 +156,7 @@ class Parser:
         # not a known type? must be a weed
         return 'weed'
 
-    def parse_xml_file(self, stem, file, check_level):
+    def parse_xml_file(self, stem, file_path, check_level):
 #    """
 #    parse xml file that looks like:
 #
@@ -132,50 +187,60 @@ class Parser:
 #        </object>
 #
 #    """
-        
-        tree = ET.parse(file)
-        root = tree.getroot()
+        parser = etree.XMLParser(encoding=ENCODE_METHOD)
+        root = ElementTree.parse(file_path, parser=parser).getroot()
+        filename = root.find('filename').text
         bbox_list = []
 
-        folder   = root.find('folder').text
-        #image    = root.find('filename').text.rsplit('.', 1)[0]
         image    = stem
-        path     = root.find('path').text
         img_size = root.find('size')
+
+        attr = "username timestamp image_sha256 xmlpath path folder path".split()
+        for key in attr:
+            if root.find(key) is not None:
+                value = root.find(key).text
+            else:
+                value = None
+            #setattr(self.filestats, key, value)
+
+
         objects  = root.findall('object')
         bboxes = defaultdict(lambda: defaultdict(list))
         for obj in objects:
             class_name = obj.find('name').text
-            class_name = class_name.replace(' ','_').lower()
+            class_name = self.fix_labels(file_path, class_name)
             difficult = int(obj.find('difficult').text)
+
+            attr = "note user".split()
+            for key in attr:
+                if obj.find(key) is not None:
+                    value = obj.find(key).text
+                else:
+                    value = None
+                #setattr(self.filestats, key, value)
+
+
             bbox = obj.find('bndbox')
             xmin = int(bbox.find('xmin').text)
             ymin = int(bbox.find('ymin').text)
             xmax = int(bbox.find('xmax').text)
             ymax = int(bbox.find('ymax').text)
 
-            # carrot_outer -> carrot , outer
-            if '_' in class_name:
-                class_base, class_type_name = class_name.rsplit('_', 1)
-            else:
-                logging.warning(f"class name should end in _outer or _meristem: {class_name}")
-                logging.warning(f"look at file: {file}")
-                class_base = class_name
-                class_type_name = 'outer'
+            class_base, class_type_name = split_name_into_plant_and_type(class_name)
 
-            if class_type_name != 'outer' and class_type_name != 'meristem':     
-                logging.error(f"class name should end in _outer or _meristem: {class_name}")
+            if class_type_name != 'outer' and class_type_name != 'stem':     
+                logging.error(f"class name should end in _outer or _stem: {class_name}")
                 logging.error(f"look at file: {file}")
             else:
                 class_type = class_type_name
-                if class_type_name == "meristem":
+                if class_type_name == "stem":
                     class_type = "inner"
 
                 if check_level == "relaxed": 
                     class_base = self.collapse_class_names(class_base)
 
-                dir = str(Path(file).parent)
-                bbox = Bbox(dir, file, image,  class_base, class_type, difficult, [xmin, ymin, xmax, ymax])
+                dir = str(Path(file_path).parent)
+                bbox = Bbox(dir, file_path, image,  class_base, class_type, difficult, [xmin, ymin, xmax, ymax])
                 bbox_list.append(bbox)
 
         return bbox_list

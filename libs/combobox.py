@@ -1,6 +1,6 @@
-import sys
-
-from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QWidget
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QComboBox
 
 
 class ComboBox(QWidget):

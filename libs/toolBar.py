@@ -1,7 +1,5 @@
-
-from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtWidgets import QToolBar, QToolButton, QWidgetAction
-
+from PySide6.QtCore import QSize,Qt
+from PySide6.QtWidgets import QToolBar, QWidgetAction, QToolButton
 
 class ToolBar(QToolBar):
 

@@ -3,12 +3,10 @@ from libs.ustr import ustr
 import hashlib
 import re
 import sys
+import logging
 
-from PyQt5.QtGui import QColor, QIcon, QRegExpValidator
-from PyQt5.QtCore import QT_VERSION_STR, QRegExp
-from PyQt5.QtWidgets import QAction, QMenu, QPushButton
-
-QT5 = True
+from PySide6.QtGui import QIcon, QAction, QColor, QRegularExpressionValidator
+from PySide6.QtWidgets import QPushButton, QMenu
 
 def new_icon(icon):
     return QIcon(':/' + icon)
@@ -56,8 +54,9 @@ def add_actions(widget, actions):
 
 
 def label_validator():
-    return QRegExpValidator(QRegExp(r'^[^ \t].+'), None)
-
+     #from PySide6.QtCore import QReg
+     #return QValidator(QRegularExpression(r'^[^ \t].+'), None)
+     return QRegularExpressionValidator(r'^[^ \t].+',None)
 
 class Struct(object):
 
@@ -75,22 +74,22 @@ def format_shortcut(text):
 
 
 def generate_color_by_text(text):
-    s = ustr(text)
-    hash_code = int(hashlib.sha256(s.encode('utf-8')).hexdigest(), 16)
+    hash_code = int(hashlib.sha256(text.encode('utf-8')).hexdigest(), 16)
     r = int((hash_code / 255) % 255)
     g = int((hash_code / 65025) % 255)
     b = int((hash_code / 16581375) % 255)
+    #logging.info(f"color for {text} = {r} {g} {b}")
     return QColor(r, g, b, 100)
 
 
-def have_qstring():
-    """p3/qt5 get rid of QString wrapper as py3 has native unicode str type"""
-    return not (sys.version_info.major >= 3 or QT_VERSION_STR.startswith('5.'))
+ #def have_qstring():
+ #    """p3/qt5 get rid of QString wrapper as py3 has native unicode str type"""
+ #    return not (sys.version_info.major >= 3 or QT_VERSION_STR.startswith('5.'))
 
 
-def util_qt_strlistclass():
-    return QStringList if have_qstring() else list
-
+# def util_qt_strlistclass():
+#     return QStringList if have_qstring() else list
+#
 
 def natural_sort(list, key=lambda s:s):
     """
@@ -102,11 +101,12 @@ def natural_sort(list, key=lambda s:s):
     sort_key = get_alphanum_key_func(key)
     list.sort(key=sort_key)
 
-
+def trimmed(text):
+    return text.strip()
 # QT4 has a trimmed method, in QT5 this is called strip
-if QT5:
-    def trimmed(text):
-        return text.strip()
-else:
-    def trimmed(text):
-        return text.trimmed()
+# if QT5:
+#     def trimmed(text):
+#         return text.strip()
+# else:
+#     def trimmed(text):
+#         return text.trimmed()

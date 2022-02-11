@@ -1,7 +1,7 @@
 
-from PyQt5.QtGui import QFontMetrics
-from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtWidgets import QAbstractSpinBox, QSpinBox
+from PySide6.QtCore import QSize,Qt
+from PySide6.QtGui import QFontMetrics
+from PySide6.QtWidgets import QSpinBox, QAbstractSpinBox
 
 
 class ZoomWidget(QSpinBox):
@@ -9,7 +9,7 @@ class ZoomWidget(QSpinBox):
     def __init__(self, value=100):
         super(ZoomWidget, self).__init__()
         self.setButtonSymbols(QAbstractSpinBox.NoButtons)
-        self.setRange(1, 500)
+        self.setRange(1, 1000)
         self.setSuffix(' %')
         self.setValue(value)
         self.setToolTip(u'Zoom Level')
@@ -19,5 +19,6 @@ class ZoomWidget(QSpinBox):
     def minimumSizeHint(self):
         height = super(ZoomWidget, self).minimumSizeHint().height()
         fm = QFontMetrics(self.font())
-        width = fm.width(str(self.maximum()))
+        #width = fm.width(str(self.maximum()))
+        width = fm.maxWidth()
         return QSize(width, height)

@@ -1,11 +1,10 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
-from PyQt5.QtGui import QColor, QPen
-from PyQt5.QtGui import QPainterPath
-
+from PySide6.QtGui import QColor, QPen, QPainterPath, QFont, QStaticText, QTextOption
+from PySide6.QtCore import Qt
 from libs.utils import distance
 import sys
+import logging
 
 DEFAULT_LINE_COLOR = QColor(0, 255, 0, 128)
 DEFAULT_FILL_COLOR = QColor(255, 0, 0, 128)
@@ -13,6 +12,14 @@ DEFAULT_SELECT_LINE_COLOR = QColor(255, 255, 255)
 DEFAULT_SELECT_FILL_COLOR = QColor(0, 128, 255, 155)
 DEFAULT_VERTEX_FILL_COLOR = QColor(0, 255, 0, 255)
 DEFAULT_HVERTEX_FILL_COLOR = QColor(255, 0, 0)
+
+def get_font(size, style):
+    logging.info(f" font {size} {style}")
+    font = QFont()            ; logging.info(f"1  font = {font}") 
+    font.setPointSize(size)   ; logging.info(f"2  font = {font} size={size}") 
+    font.setStyleHint(style)  ; logging.info(f"3  font = {font} style={style}")
+    font.setBold(True)        ; logging.info(f"4  font = {font}") 
+    return font
 
 
 class Shape(object):
@@ -31,10 +38,17 @@ class Shape(object):
     point_type = P_ROUND
     point_size = 8
     scale = 1.0
-    label_font_size = 8
+    label_font_size = 12
+    note_font_size =  10
+    label_font = get_font(label_font_size, QFont.SansSerif)
+    note_font  = get_font(note_font_size,  QFont.TypeWriter)
+    paint_label = False
+    paint_note  = False
 
     def __init__(self, label=None, line_color=None, difficult=False, paint_label=False):
         self.label = label
+        self.note  = None
+        self.user  = None
         self.points = []
         self.fill = False
         self.selected = False
@@ -55,6 +69,8 @@ class Shape(object):
             # with an object attribute. Currently this
             # is used for drawing the pending line a different color.
             self.line_color = line_color
+        logging.debug(f"Shape init with label = {label}")
+
 
     def close(self):
         self._closed = True
@@ -104,7 +120,8 @@ class Shape(object):
 
             painter.drawPath(line_path)
             painter.drawPath(vertex_path)
-            painter.fillPath(vertex_path, self.vertex_fill_color)
+            #painter.fillPath(vertex_path, self.vertex_fill_color)
+            painter.fillPath(vertex_path, self.line_color)
 
             # Draw text at the top-left
             if self.paint_label:
@@ -115,18 +132,56 @@ class Shape(object):
                     min_x = min(min_x, point.x())
                     min_y = min(min_y, point.y())
                 if min_x != sys.maxsize and min_y != sys.maxsize:
-                    font = QFont()
-                    font.setPointSize(self.label_font_size)
-                    font.setBold(True)
-                    painter.setFont(font)
                     if self.label is None:
                         self.label = ""
                     if min_y < min_y_label:
                         min_y += min_y_label
+                    painter.setFont(self.label_font)
                     painter.drawText(min_x, min_y, self.label)
 
+            # if body has text
+            if self.paint_note and self.note is not None:
+
+                if self.user is None:
+                    user_text = ""
+                else:
+                    user_text = f'<span style="color: black;">{self.user}:</span>'
+
+                text = f"""
+<pre>{user_text}
+<span style="color: white">{self.note}</span></pre>'
+"""
+
+                font = QFont()
+                font.setStyleHint(QFont.TypeWriter);
+                font.setPointSize(self.note_font_size)
+                font.setBold(False)
+                painter.setFont(font)
+                
+                tl = self.points[0]
+                #tr = self.points[1]
+                #width = tr.x() - tl.x()
+                
+                st = QStaticText(text)
+                st.setTextFormat(Qt.TextFormat.RichText)
+                #st.setTextWidth(width)
+                #st.setTextOption(QTextOption.WrapMode.WordWrap)
+                #st.setTextAlignment(Qt.AlignCenter)
+                #options = st.textOption()
+                #size = st.size()
+                painter.setFont(self.note_font)
+                painter.drawStaticText(tl.x(), tl.y(), st) 
+
+
             if self.fill:
-                color = self.select_fill_color if self.selected else self.fill_color
+                if self.selected:
+                    color = self.select_fill_color
+                    #logging.info(f"selected={self.selected} so c={color.name()} alpha={color.alpha()}")
+                else:
+                    color = self.fill_color
+                    #color.setAlpha(50)
+                    #logging.debug(f"fill so selected={self.selected} so c={color.name()} alpha={color.alpha()}")
+
                 painter.fillPath(line_path, color)
 
     def draw_vertex(self, path, i):

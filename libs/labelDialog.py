@@ -1,8 +1,7 @@
 
-from PyQt5.QtGui import QCursor
-from PyQt5.QtCore import QPoint, QStringListModel, Qt
-from PyQt5.QtWidgets import (QCompleter, QDialog, QDialogButtonBox, QLineEdit, QListWidget,
-                             QVBoxLayout)
+from PySide6.QtCore import QStringListModel, Qt, QPoint
+from PySide6.QtGui import QCursor
+from PySide6.QtWidgets import QDialogButtonBox, QDialog, QLineEdit, QCompleter, QVBoxLayout, QListWidget, QLabel
 
 from libs.utils import new_icon, label_validator, trimmed
 
@@ -18,6 +17,9 @@ class LabelDialog(QDialog):
         self.edit.setText(text)
         self.edit.setValidator(label_validator())
         self.edit.editingFinished.connect(self.post_process)
+        # added by -s
+        self.edit.setReadOnly(True)
+        self.edit.setEnabled(False)
 
         model = QStringListModel()
         model.setStringList(list_item)
@@ -26,10 +28,15 @@ class LabelDialog(QDialog):
         self.edit.setCompleter(completer)
 
         layout = QVBoxLayout()
+
+        label = QLabel()
+        label.setText(text)
+        layout.addWidget(label)
+
         layout.addWidget(self.edit)
-        self.button_box = bb = BB(BB.StandardButton.Ok | BB.StandardButton.Cancel, Qt.Orientation.Horizontal, self)
-        bb.button(BB.StandardButton.Ok).setIcon(new_icon('done'))
-        bb.button(BB.StandardButton.Cancel).setIcon(new_icon('undo'))
+        self.button_box = bb = BB(BB.Ok | BB.Cancel, Qt.Horizontal, self)
+        bb.button(BB.Ok).setIcon(new_icon('done'))
+        bb.button(BB.Cancel).setIcon(new_icon('undo'))
         bb.accepted.connect(self.validate)
         bb.rejected.connect(self.reject)
         layout.addWidget(bb)

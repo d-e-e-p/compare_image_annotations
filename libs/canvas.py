@@ -1,33 +1,41 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from PySide6.QtCore import QPointF, QPoint, Qt, Signal, QRect, QSize, QRectF
+from PySide6.QtGui import QColor, QPixmap, QPainter, QCursor, QBrush, QFont, QStaticText, QPen, QLinearGradient
+from PySide6.QtWidgets import QMenu, QApplication, QWidget, QRubberBand
 
 from libs.shape import Shape
 from libs.utils import distance
+from libs.labelFile import LabelFile
 
-from PyQt5.QtGui import QBrush, QColor, QCursor, QPainter, QPixmap
-from PyQt5.QtCore import QPoint, QPointF, Qt, pyqtSignal, QRect, QSize
-from PyQt5.QtWidgets import QApplication, QMenu, QWidget, QRubberBand
+import logging
+from enum import Enum
 
 CURSOR_DEFAULT = Qt.CursorShape.ArrowCursor
 CURSOR_POINT   = Qt.CursorShape.PointingHandCursor
 CURSOR_DRAW    = Qt.CursorShape.CrossCursor
 CURSOR_MOVE    = Qt.CursorShape.ClosedHandCursor
 CURSOR_GRAB    = Qt.CursorShape.OpenHandCursor
+CURSOR_ZOOM    = Qt.CursorShape.CrossCursor
 
-import logging
+class MouseEvent(Enum):
+    mouseMoveEvent          = "mouseMoveEvent"
+    mousePressEvent         = "mousePressEvent"
+    mouseReleaseEvent       = "mouseReleaseEvent"
+    mouseDoubleClickEvent   = "mouseDoubleClickEvent"
 
 # class Canvas(QGLWidget):
 
-
 class Canvas(QWidget):
-    zoomRequest = pyqtSignal(int)
-    scrollRequest = pyqtSignal(int, int)
-    scrollRequestZoom = pyqtSignal(int, int)
-    newShape = pyqtSignal()
-    selectionChanged = pyqtSignal(bool)
-    shapeMoved = pyqtSignal()
-    drawingPolygon = pyqtSignal(bool)
+    zoomRequest = Signal(int)
+    zoomToSelection = Signal(QRect)
+    scrollRequest = Signal(int, int)
+    newShape = Signal()
+    selectionChanged = Signal(bool)
+    shapeMoved = Signal()
+    drawingPolygon = Signal(bool)
 
-    CREATE, EDIT, = list(range(2))
-    
+    CREATE, EDIT = list(range(2))
 
     epsilon = 11.0
 
@@ -63,14 +71,24 @@ class Canvas(QWidget):
         self.setFocusPolicy(Qt.WheelFocus)
         self.verified = False
         self.draw_square = False
-        self.zoom_window = False
+   
+        # for zoom
+        self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
+        self.mode_zoom_to_area = False
+        self.zoom_sel_start = QPoint()
+        self.zoom_sel_end   = QPoint()
+
+        # for footer title block
+        self.footer_block_height = 200
+
+        self.footer_left_block = None
+        self.footer_left_block_text = None
+
+        self.footer_right_block = None
+        self.footer_right_block_text = None
 
         # initialisation for panning
         self.pan_initial_pos = QPoint()
-
-        # init for zooming
-        self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
-        self.origin = QPoint()
 
     def set_drawing_color(self, qcolor):
         self.drawing_line_color = qcolor
@@ -91,39 +109,15 @@ class Canvas(QWidget):
     def drawing(self):
         return self.mode == self.CREATE
 
-    def zooming(self):
-        return self.zoom_window
-
-    def set_zooming(self, value=True):
-        self.zoom_window = value
-
-    def get_zoom_scale(self, rect):
-        s = self.scale
-        w, h = self.pixmap.width() * s, self.pixmap.height() * s
-        ws = rect.width()
-        hs = rect.height()
-
-        scalex = ws/w
-        scaley = hs/h
-
-        scale = int(min(scalex, scaley) * 100)
-        logging.info(f"w,h = {w},{h} but ws={ws}, {hs} so scale = {scale}")
-        return scale
-        
-
-
     def editing(self):
         return self.mode == self.EDIT
 
     def set_editing(self, value=True):
         self.mode = self.EDIT if value else self.CREATE
         if not value:  # Create
-            logging.info(f"un highlight")
             self.un_highlight()
-            logging.info(f"de select highlight")
             self.de_select_shape()
         self.prev_point = QPointF()
-        logging.info(f"prev_poik = {self.prev_point}")
         self.repaint()
 
     def un_highlight(self):
@@ -134,30 +128,33 @@ class Canvas(QWidget):
     def selected_vertex(self):
         return self.h_vertex is not None
 
+
+    # TODO: labelImg.py should also use this version
+    @staticmethod
+    def format_shape(s):
+        return dict(label=s.label,
+                    line_color=s.line_color.getRgb(),
+                    fill_color=s.fill_color.getRgb(),
+                    points=[(p.x(), p.y()) for p in s.points],
+                    # add chris
+                    difficult=s.difficult)
+
     def mouseMoveEvent(self, ev):
         """Update line with last point and current coordinates."""
         pos = self.transform_pos(ev.pos())
 
         # Update coordinates in status bar if image is opened
         window = self.parent().window()
-        if window.file_path is not None:
+        if window.image_path is not None:
             self.parent().window().label_coordinates.setText(
                 'X: %d; Y: %d' % (pos.x(), pos.y()))
 
-        if self.zooming():
-            if not self.origin.isNull():
-                rect = QRect(self.origin, ev.pos()).normalized()
-                self.rubberBand.setGeometry(QRect(self.origin, ev.pos()).normalized())
-                logging.info(f" from={self.origin} to={ev.pos()} rect={rect}")
-                point = self.offset_to_box(rect)
-                logging.info(f" offset point = {point} current = {self.current}")
-                scale = self.get_zoom_scale(rect)
-                #self.scale = 0.01 * scale
-                # pan
-                self.scrollRequestZoom.emit(point.x(), Qt.Horizontal)
-                self.scrollRequestZoom.emit(point.y(), Qt.Vertical)
-                self.adjustSize()
-                self.update()
+        # zooming
+        if self.mode_zoom_to_area:
+            self.override_cursor(CURSOR_ZOOM)
+            self.handle_zoom_to_area(MouseEvent.mouseMoveEvent, ev.pos())
+            return
+
 
         # Polygon drawing.
         if self.drawing():
@@ -256,7 +253,7 @@ class Canvas(QWidget):
         # - Highlight shapes
         # - Highlight vertex
         # Update shape/vertex fill and tooltip value accordingly.
-        self.setToolTip("Image")
+        self.setToolTip("w:create z:zoom f:fit")
         for shape in reversed([s for s in self.shapes if self.isVisible(s)]):
             # Look for a nearby vertex to highlight. If that fails,
             # check if we happen to be inside a shape.
@@ -275,8 +272,11 @@ class Canvas(QWidget):
                 if self.selected_vertex():
                     self.h_shape.highlight_clear()
                 self.h_vertex, self.h_shape = None, shape
-                self.setToolTip(
-                    "Click & drag to move shape '%s'" % shape.label)
+
+                fshape = Canvas.format_shape(shape)
+                bnd_box = LabelFile.convert_points_to_bnd_box(fshape['points'])
+                message = f"Click & drag to move {shape.label}\n{bnd_box}"
+                self.setToolTip(message)
                 self.setStatusTip(self.toolTip())
                 self.override_cursor(CURSOR_GRAB)
                 self.update()
@@ -302,9 +302,9 @@ class Canvas(QWidget):
         if ev.button() == Qt.LeftButton:
             if self.drawing():
                 self.handle_drawing(pos)
-            elif self.zooming():
-                logging.debug(f"handle_zoommig {ev.pos()} pos={pos}")
-                self.handle_zooming(ev.pos())
+            elif self.mode_zoom_to_area:
+                self.handle_zoom_to_area(MouseEvent.mousePressEvent, ev.pos())
+                return
             else:
                 selection = self.select_shape_point(pos)
                 self.prev_point = pos
@@ -321,10 +321,11 @@ class Canvas(QWidget):
 
     def mouseReleaseEvent(self, ev):
 
-        if self.zooming():
+        if self.mode_zoom_to_area:
             if ev.button() == Qt.LeftButton:
-                self.rubberBand.hide()
-                self.set_zooming(False)
+                self.handle_zoom_to_area(MouseEvent.mouseReleaseEvent, ev.pos())
+                return
+
 
         if ev.button() == Qt.RightButton:
             menu = self.menus[bool(self.selected_shape_copy)]
@@ -369,15 +370,32 @@ class Canvas(QWidget):
             self.set_hiding(True)
             self.repaint()
 
-    def handle_zooming(self, pos):
-        #self.origin = pos.toPoint()
-        self.origin = pos
-        logging.info(f"handle_zoommig {self.origin} current={self.current}")
-        self.rubberBand.setGeometry(QRect(self.origin, QSize()))
-        self.rubberBand.show()
+    def handle_zoom_to_area(self, state, pos):
+        #logging.debug(f"handle_z_to_s state={state} p={pos}")
+        if state == MouseEvent.mousePressEvent:
+            self.zoom_sel_start = QPoint(pos)
+            rect = QRect(self.zoom_sel_start, QSize())
+            self.rubberBand.setGeometry(rect)
+            self.rubberBand.show()
+
+        elif state == MouseEvent.mouseMoveEvent:
+            self.zoom_sel_end = QPoint(pos)
+            rect = QRect(self.zoom_sel_start, self.zoom_sel_end).normalized()
+            self.rubberBand.setGeometry(rect)
+
+        elif state == MouseEvent.mouseReleaseEvent:
+            self.rubberBand.hide()
+            start = self.transform_and_clip(self.zoom_sel_start)
+            end   = self.transform_and_clip(self.zoom_sel_end  )
+            rect  = QRect(start, end).normalized()
+            self.zoomToSelection.emit(rect)
+
+        else:
+            logging.error(f"invalid state for zoom to area : {state}")
+
+
 
     def handle_drawing(self, pos):
-        logging.info(f"handle_drawing {pos}")
         if self.current and self.current.reach_max_points() is False:
             init_pos = self.current[0]
             min_x = init_pos.x()
@@ -389,7 +407,6 @@ class Canvas(QWidget):
             self.current.add_point(target_pos)
             self.current.add_point(QPointF(min_x, max_y))
             self.finalise()
-            logging.info(f"init = {init_pos} tar = {target_pos}")
         elif not self.out_of_pixmap(pos):
             self.current = Shape()
             self.current.add_point(pos)
@@ -397,7 +414,6 @@ class Canvas(QWidget):
             self.set_hiding()
             self.drawingPolygon.emit(True)
             self.update()
-            logging.info(f"draw line {pos}")
 
     def set_hiding(self, enable=True):
         self._hide_background = self.hide_background if enable else False
@@ -460,7 +476,7 @@ class Canvas(QWidget):
     def bounded_move_vertex(self, pos):
         index, shape = self.h_vertex, self.h_shape
         point = shape[index]
-        if self.out_of_pixmap(pos):
+        if self.out_of_pixmap(pos): 
             size = self.pixmap.size()
             clipped_x = min(max(0, pos.x()), size.width())
             clipped_y = min(max(0, pos.y()), size.height())
@@ -558,7 +574,6 @@ class Canvas(QWidget):
         p = self._painter
         p.begin(self)
         p.setRenderHint(QPainter.Antialiasing)
-        p.setRenderHint(QPainter.HighQualityAntialiasing)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
 
         p.scale(self.scale, self.scale)
@@ -605,32 +620,37 @@ class Canvas(QWidget):
         self.setAutoFillBackground(True)
         if self.verified:
             pal = self.palette()
-            pal.setColor(self.backgroundRole(), QColor(184, 239, 38, 128))
+            pal.setColor(self.backgroundRole(), Qt.white)
             self.setPalette(pal)
         else:
             pal = self.palette()
-            pal.setColor(self.backgroundRole(), QColor(232, 232, 232, 255))
+            pal.setColor(self.backgroundRole(), Qt.black)
             self.setPalette(pal)
+
+        self.add_footer_block(p)
 
         p.end()
 
     def transform_pos(self, point):
         """Convert from widget-logical coordinates to painter-logical coordinates."""
+        point = QPointF(point.x() ,point.y() )
         return point / self.scale - self.offset_to_center()
 
-    def offset_to_box(self, rect ):
+    def clip_pos(self, pos):
+        if self.out_of_pixmap(pos):
+            size = self.pixmap.size()
+            clipped_x = min(max(0, pos.x()), size.width())
+            clipped_y = min(max(0, pos.y()), size.height())
+            pos = QPointF(clipped_x, clipped_y)
+        return pos
 
-        return rect.center()
+    def transform_and_clip(self,point):
+        pointF = self.transform_pos(point)
+        pointF = self.clip_pos(pointF)
 
-        s = self.scale
-        w, h = self.pixmap.width() * s, self.pixmap.height() * s
-        ws, hs = rect.size()
-        
-        area = super(Canvas, self).size()
-        aw, ah = area.width(), area.height()
-        x = (aw - w) / (2 * s) if aw > w else 0
-        y = (ah - h) / (2 * s) if ah > h else 0
-        return QPointF(x, y)
+        return pointF.toPoint()
+
+
 
     def offset_to_center(self):
         s = self.scale
@@ -646,12 +666,7 @@ class Canvas(QWidget):
         return not (0 <= p.x() <= w and 0 <= p.y() <= h)
 
     def finalise(self):
-        logging.info(f"icurrent = {self.current}")
         assert self.current
-        if self.zoom_window:
-            logging.info(f"{self.current.points}")
-            self.zoom_window = False
-            return
         if self.current.points[0] == self.current.points[-1]:
             self.current = None
             self.drawingPolygon.emit(False)
@@ -678,7 +693,12 @@ class Canvas(QWidget):
 
     def minimumSizeHint(self):
         if self.pixmap:
-            return self.scale * self.pixmap.size()
+            yfudge = 0;
+            psize_old = self.pixmap.size()
+            psize_new = QSize(psize_old.width(), psize_old.height() + 3 * self.footer_block_height + yfudge)
+            size = self.scale * psize_new
+            #logging.debug(f" size = {self.scale} * {psize_new} = {size} bh={self.footer_block_height}")
+            return size 
         return super(Canvas, self).minimumSizeHint()
 
     def wheelEvent(self, ev):
@@ -712,14 +732,38 @@ class Canvas(QWidget):
             self.update()
         elif key == Qt.Key_Return and self.can_close_shape():
             self.finalise()
-        elif key == Qt.Key_Left and self.selected_shape:
-            self.move_one_pixel('Left')
-        elif key == Qt.Key_Right and self.selected_shape:
-            self.move_one_pixel('Right')
-        elif key == Qt.Key_Up and self.selected_shape:
-            self.move_one_pixel('Up')
-        elif key == Qt.Key_Down and self.selected_shape:
-            self.move_one_pixel('Down')
+        elif self.selected_shape:
+            if key == Qt.Key_Left:
+                self.move_one_pixel('Left')
+            elif key == Qt.Key_Right:
+                self.move_one_pixel('Right')
+            elif key == Qt.Key_Up:
+                self.move_one_pixel('Up')
+            elif key == Qt.Key_Down:
+                self.move_one_pixel('Down')
+        elif not self.selected_shape:
+            if key == Qt.Key_Left:
+                self.pan_one_step('Left')
+            elif key == Qt.Key_Right:
+                self.pan_one_step('Right')
+            elif key == Qt.Key_Up:
+                self.pan_one_step('Up')
+            elif key == Qt.Key_Down:
+                self.pan_one_step('Down')
+                
+
+    def pan_one_step(self, direction):
+        #  TODO: use singleStep() instead? 10% works better though...
+            v_delta = self.pixmap.height() * 0.1
+            h_delta = self.pixmap.width()  * 0.1
+            if direction == 'Left':
+                self.scrollRequest.emit(+h_delta, Qt.Horizontal)
+            elif direction == 'Right':
+                self.scrollRequest.emit(-h_delta, Qt.Horizontal)
+            elif direction == 'Up':
+                self.scrollRequest.emit(+v_delta, Qt.Vertical)
+            elif direction == 'Down':
+                self.scrollRequest.emit(-v_delta, Qt.Vertical)
 
     def move_one_pixel(self, direction):
         # print(self.selectedShape.points)
@@ -825,3 +869,88 @@ class Canvas(QWidget):
 
     def set_drawing_shape_to_square(self, status):
         self.draw_square = status
+
+    def add_footer_block(self,p):
+        self.add_footer_left_block(p)
+        self.add_footer_right_block(p)
+
+    def add_footer_left_block(self,p):
+
+        if self.footer_left_block_text is None:
+            return
+
+        # init
+        if self.footer_left_block is None:
+            self.footer_left_block = QStaticText()
+            self.footer_left_block.setTextFormat(Qt.TextFormat.RichText)
+
+
+        self.footer_left_block.setText(self.footer_left_block_text)
+
+        psize = self.pixmap.size()
+        self.footer_left_block.setTextWidth(800)
+        tsize = self.footer_left_block.size()
+        
+
+        # grow but never shrink!
+        self.footer_block_height = max(tsize.height(), self.footer_block_height)
+        offsetx = 100
+        offsety =  10
+        #p.setCompositionMode(QPainter.CompositionMode_Source);
+        x = offsetx
+        y = psize.height() + offsety
+
+        margin = 10
+        rect =  QRect(x-margin,y-margin,tsize.width()+2*margin, tsize.height()+2*margin)
+        
+        p.setPen(QPen(Qt.white, 1, Qt.SolidLine))
+        #p.setBrush(QBrush(Qt.black, Qt.SolidPattern))
+        gradient = QLinearGradient(QRectF(rect).topLeft(),QRectF(rect).bottomLeft())
+        gradient.setColorAt(0.0, Qt.black)
+        gradient.setColorAt(0.4, "#333")
+        gradient.setColorAt(0.7, Qt.black)
+        p.setBrush(gradient)
+        rounding = 10
+        p.drawRoundedRect(rect, rounding, rounding)
+        #p.drawRect(x-margin,y-margin,tsize.width()+2*margin, tsize.height()+2*margin)
+        p.drawStaticText(x, y,  self.footer_left_block)
+        #p.setCompositionMode(QPainter.CompositionMode_SourceOver);
+
+    def add_footer_right_block(self,p):
+
+        if self.footer_right_block_text is None:
+            return
+
+        # init
+        if self.footer_right_block is None:
+            self.footer_right_block = QStaticText()
+            self.footer_right_block.setTextFormat(Qt.TextFormat.RichText)
+
+
+        self.footer_right_block.setText(self.footer_right_block_text)
+
+        psize = self.pixmap.size()
+        tsize = self.footer_right_block.size()
+        self.footer_block_height = max(tsize.height(), self.footer_block_height)
+        offsetx = 100
+        offsety =  10
+        #p.setCompositionMode(QPainter.CompositionMode_Source);
+        x = psize.width() - tsize.width() - offsetx
+        y = psize.height() + offsety
+
+        margin = 10
+        rect =  QRect(x-margin,y-margin,tsize.width()+2*margin, tsize.height()+2*margin)
+        
+        p.setPen(QPen(Qt.white, 1, Qt.SolidLine))
+        #p.setBrush(QBrush(Qt.black, Qt.SolidPattern))
+        gradient = QLinearGradient(QRectF(rect).topLeft(),QRectF(rect).bottomLeft())
+        gradient.setColorAt(0.0, Qt.black)
+        gradient.setColorAt(0.4, "#333")
+        gradient.setColorAt(0.7, Qt.black)
+        p.setBrush(gradient)
+        rounding = 10
+        p.drawRoundedRect(rect, rounding, rounding)
+        #p.drawRect(x-margin,y-margin,tsize.width()+2*margin, tsize.height()+2*margin)
+        p.drawStaticText(x, y,  self.footer_right_block)
+        #p.setCompositionMode(QPainter.CompositionMode_SourceOver);
+
