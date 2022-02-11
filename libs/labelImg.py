@@ -2524,7 +2524,10 @@ def run_main_gui(bbl, pl, args):
     Do everything but app.exec_() -- so that we can test the application in one thread
     """
     argv = []
-    app = QApplication(argv)
+    #app = QApplication(argv)
+    app = QApplication.instance()
+    if app == None:
+        app = QApplication(argv)
     app.setApplicationName(__appname__)
     app.setWindowIcon(new_icon("tensor"))
     #app.setStyle('Fusion')
