@@ -102,9 +102,11 @@ def run_args_gui():
     res = Results()
     args_dialog  = ArgsDialog( text="Enter Notes", res=res )
     args_dialog.show()
-    #note_text = note_dialog.pop_up(msg)
     app.exec()
-    return res.args
+    if hasattr(res, "args"):
+        return res.args
+    else:
+        return None
 
 def main(): 
 
@@ -126,6 +128,7 @@ def main():
             print(f"cancel--existing")
             print(Style.RESET_ALL)
             sys.exit(0)
+
         args = parser.parse_args(shlex.split(argString))
 
     setup_logging(args)

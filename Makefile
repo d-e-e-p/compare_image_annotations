@@ -10,7 +10,8 @@ test:
 
 install:
 	pyinstaller --clean compare_image_annotations.spec
-	cp -ipv dist/compare_image_annotations.exe '/g/.shortcut-targets-by-id/1_l2-tZ-8N-upGop5x8ICLbikmWLG95Ej/CWs Labelling Consistency/compare_image_annotations.exe'
+	echo cp -ipv dist/compare_image_annotations.exe  /g/Shared\ drives/ML/CloudFactory/TF\ CF\ Share/programs/
+
 
 
 package:
