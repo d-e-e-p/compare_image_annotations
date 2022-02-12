@@ -9,7 +9,7 @@
 import sys
 from collections import defaultdict, OrderedDict
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
-from os.path import exists, join, isdir, isfile
+from os.path import exists, join, isdir, isfile,  dirname, abspath
 import logging
 import io
 import math
@@ -109,18 +109,23 @@ class Plotter:
             self.source_img[image_name] = \
                     self.add_margin(self.source_img[image_name],0,self.margin_x,self.margin_y,0,(1, 1, 1))
 
+    def get_app_dir(self):
+        """
+        https://stackoverflow.com/questions/404744/determining-application-path-in-a-python-exe-generated-by-pyinstaller
+        """
+        if getattr(sys, 'frozen', False):
+            application_path = sys._MEIPASS
+        else:
+            application_path = dirname(abspath(__file__))
+        return application_path
+
     def get_fonts(self):
         fnt = {}
         # need to handle pyinstaller data file, see:
         # https://stackoverflow.com/questions/51060894/adding-a-data-file-in-pyinstaller-using-the-onefile-option
         path = 'resources/fonts/'
-        font_path = self.findDir(path)
-        if font_path is None:
-            try:
-                # PyInstaller creates a temp folder and stores path in _MEIPASS
-                font_path = sys._MEIPASS + '/fonts/'
-            except Exception:
-                font_path = 'resources/fonts/'
+        dir = self.get_app_dir()
+        font_path = join(dir,path)
 
         if exists(font_path):
             logging.debug(f" font_path all OK: {font_path}")
@@ -131,10 +136,10 @@ class Plotter:
 
         #import pdb; pdb.set_trace()
         try:
-            fnt['norm'] = ImageFont.truetype(font_path + 'FreeMono.ttf', 16)
-            fnt['bold'] = ImageFont.truetype(font_path + 'FreeMonoBold.ttf', 16)
-            fnt['italic'] = ImageFont.truetype(font_path + 'FreeMonoOblique.ttf', 16)
-            fnt['bolditalic'] = ImageFont.truetype(font_path + 'FreeMonoBoldOblique.ttf', 16)
+            fnt['norm']       = ImageFont.truetype(join(font_path, 'FreeMono.ttf'), 16)
+            fnt['bold']       = ImageFont.truetype(join(font_path, 'FreeMonoBold.ttf'), 16)
+            fnt['italic']     = ImageFont.truetype(join(font_path, 'FreeMonoOblique.ttf'), 16)
+            fnt['bolditalic'] = ImageFont.truetype(join(font_path, 'FreeMonoBoldOblique.ttf'), 16)
         except OSError:
             raise Exception("font error: ")
         return fnt
@@ -558,18 +563,3 @@ image = {image_name} class = {cls}
         result.paste(pil_img, (left, top))
         return result
 
-    # from https://www.oreilly.com/library/view/python-cookbook/0596001673/ch04s22.html
-    def _find(self, pathname, matchFunc=isfile):
-        for dirname in sys.path:
-            candidate = join(dirname, pathname)
-            if matchFunc(candidate):
-                return candidate
-            else:
-                return None
-        
-
-    def findFile(self, pathname):
-        return self._find(pathname)
-
-    def findDir(self, path):
-        return self._find(path, matchFunc=isdir)

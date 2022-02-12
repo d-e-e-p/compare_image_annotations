@@ -21,7 +21,7 @@ with open('lib/constants.py', 'w') as f:
 a = Analysis(['compare_image_annotations.py'],
              pathex=[],
              binaries=[],
-             datas=[('resources/fonts', 'fonts')],
+             datas=[('resources/fonts', 'resources/fonts'), ('resources/json', 'resources/json')],
              hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],

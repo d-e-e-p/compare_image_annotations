@@ -115,6 +115,7 @@ def main():
     print(f"{__appname__}: version {VERSION} build {BUILD_DATE}")
     print(Style.RESET_ALL)
 
+
     parser = parse_args()
     args = parser.parse_args()
     # use gui if invalid args, otherwise proceed
