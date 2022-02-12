@@ -69,7 +69,6 @@ class Shape(object):
             # with an object attribute. Currently this
             # is used for drawing the pending line a different color.
             self.line_color = line_color
-        logging.debug(f"Shape init with label = {label}")
 
 
     def close(self):

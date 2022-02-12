@@ -237,7 +237,7 @@ class PascalVocReader:
         """
         text = text.lower()
         basename = Path(file).name
-        logging.debug(f" {basename}: fixing  {text}")
+        #logging.debug(f" {basename}: fixing  {text}")
         if '-' in text:
             out = text.replace('-','_')
             logging.info(f" {basename}: replaced dash so {text} -> {out}")
@@ -256,7 +256,7 @@ class PascalVocReader:
         if text not in PLANT_TYPE_NAMES:
             logging.warning(f" {basename}: label {text} not in standard label types: {PLANT_TYPE_NAMES}")
 
-        logging.debug(f" {basename}: returning  {text}")
+        #logging.debug(f" {basename}: returning  {text}")
         return text
         
 
@@ -288,7 +288,7 @@ class PascalVocReader:
             bnd_box = object_iter.find("bndbox")
             label = object_iter.find('name').text
             label = self.fix_labels(self.file_path, label)
-            logging.debug(f"fix_label = {label}")
+            #logging.debug(f"fix_label = {label}")
             if object_iter.find('note') is not None:
                 note = object_iter.find('note').text
             else:

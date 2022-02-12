@@ -50,15 +50,13 @@ class Parser:
         files = []
         stem2files = defaultdict(list)
         for rdir in root_dir:
-            logging.info(f"{rdir} in {root_dir}")
             for dir, _, files in os.walk(rdir, followlinks=True):
-                logging.info(f"{dir} {_} {files}")
                 for file in files:
                     if file.endswith(ext): 
                         filename = os.path.join(dir, file)
                         stem = Path(filename).stem
                         stem2files[stem].append(filename)
-        logging.info(f"{stem2files}")
+        logging.debug(f"{stem2files}")
 
         # remove entries with only 1 xml
         if prune:
@@ -122,7 +120,6 @@ class Parser:
         """
         text = text.lower()
         basename = Path(file).name
-        logging.debug(f" {basename}: fixing  {text}")
         if '-' in text:
             out = text.replace('-','_')
             logging.info(f" {basename}: replaced dash so {text} -> {out}")
@@ -141,7 +138,6 @@ class Parser:
         if text not in PLANT_TYPE_NAMES:
             logging.warning(f" {basename}: label {text} not in standard label types: {PLANT_TYPE_NAMES}")
 
-        logging.debug(f" {basename}: returning  {text}")
         return text
 
     def collapse_class_names(self, class_base):

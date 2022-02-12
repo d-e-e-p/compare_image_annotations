@@ -72,12 +72,6 @@ def setup_logging(args):
 
     log = logging.getLogger()
 
-    format_long = logging.Formatter(
-    '%(levelname)s | %(module)s | %(funcName)s | %(lineno)d : %(message)s')
-    format_short = logging.Formatter('%(levelname)s : %(message)s')
-
-    #logging.basicConfig(level=logging.DEBUG)
-    log.setLevel(logging.DEBUG)
 
     stream_handler = logging.StreamHandler()
     if args.verbose:
@@ -94,15 +88,18 @@ def setup_logging(args):
     file_handler.setFormatter(CustomFormatter(type='long',color=False))
     file_handler.setLevel(logging.DEBUG)
     log.addHandler(file_handler)
+    log.setLevel(logging.DEBUG)
+    log.removeHandler(log.handlers[0])  # key to avoid seeing double!
 
     return log
 
 def run_args_gui():
     app = QApplication(sys.argv)
     res = Results()
-    args_dialog  = ArgsDialog( text="Enter Notes", res=res )
+    args_dialog  = ArgsDialog( text="Enter Args", res=res )
     args_dialog.show()
     app.exec()
+    app.exit()
     if hasattr(res, "args"):
         return res.args
     else:
@@ -154,7 +151,7 @@ def main():
     print(f"    5/5 {col} loading gui " + Style.RESET_ALL)
 
     app, _win = run_main_gui(bbl, pl, args)
-    return app.exec_()
+    return app.exec()
     print(f"    done " + Style.RESET_ALL)
 
 

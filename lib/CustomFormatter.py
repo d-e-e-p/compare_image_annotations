@@ -5,9 +5,12 @@ based on https://stackoverflow.com/questions/384076/how-can-i-color-python-loggi
 import logging
 import colorama
 from colorama import Fore, Back, Style
-from functools import partial
+
+colorama.init(autoreset=False)
 
 class CustomFormatter(logging.Formatter):
+
+
 
     col = {}
     col['white']    = Fore.WHITE  + Back.BLACK
@@ -16,18 +19,22 @@ class CustomFormatter(logging.Formatter):
     col['bold_red'] = Fore.RED  + Back.BLACK + Style.BRIGHT
     col['reset']     = Style.RESET_ALL
 
-    fmt = {}
-    fmt['long']  = '%(levelname)s | %(module)s | %(funcName)s | %(lineno)d : %(message)s'
-    fmt['short'] = '%(levelname)s : %(message)s'
+    fmta = {}
+    fmta['long']  = '%(levelname)s | %(module)s | %(funcName)s | %(lineno)d : %(message)s'
+    fmta['short'] = '%(levelname)s : %(message)s'
+
+    fmti = {}
+    fmti['long']  = fmta['long']
+    fmti['short'] = '%(message)s'
 
     FORMATS = {}
-    for types in fmt.keys():
+    for types in fmta.keys():
         FORMATS[types] = {
-            logging.DEBUG:     col['white']     + fmt[types] + col['reset'],
-            logging.INFO:      col['green']     + fmt[types] + col['reset'],
-            logging.WARNING:   col['red']       + fmt[types] + col['reset'],
-            logging.ERROR:     col['bold_red']  + fmt[types] + col['reset'],
-            logging.CRITICAL:  col['bold_red']  + fmt[types] + col['reset'],
+            logging.DEBUG:     col['white']     + fmta[types] + col['reset'],
+            logging.INFO:      col['green']     + fmti[types] + col['reset'],
+            logging.WARNING:   col['red']       + fmta[types] + col['reset'],
+            logging.ERROR:     col['bold_red']  + fmta[types] + col['reset'],
+            logging.CRITICAL:  col['bold_red']  + fmta[types] + col['reset'],
         }
 
     def __init__(self, type, color):
@@ -39,7 +46,7 @@ class CustomFormatter(logging.Formatter):
         if self.color:
             log_fmt = self.FORMATS[self.type].get(record.levelno)
         else:
-            log_fmt = self.fmt[self.type]
+            log_fmt = self.fmta[self.type]
 
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)

@@ -32,7 +32,7 @@ from collections import defaultdict
 from lib.Bbox    import Bbox
 from lib.Bbox    import BboxList
 from lib.Plotter import Plotter, DrawObject
-from lib.ColorScheme import ColorScheme
+from lib.ColorPalette import ColorPalette
 
 from PySide6.QtGui import QTextLine, QAction, QImage, QColor, QCursor, QPixmap, QImageReader, QFont, QPainter
 from PySide6.QtCore import QObject, Qt, QPoint, QSize, QByteArray, QTimer, QFileInfo, QPointF, QProcess, QRect
@@ -117,8 +117,8 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.bbl = bbl
         self.pl  = pl
-        self.ref_user = ""
-        self.current_image = ""
+        self.ref_user = None
+        self.current_image = None
         self.current_draw_object = None
         self.iou_filter_value = 10
 
@@ -137,7 +137,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.last_open_dir = None
         self.cur_img_idx = 0
         self.img_count = len(self.m_img_list)
-        self.color_pallet = self.pl.color_pallet
+        self.color_theme = self.pl.color_theme
         self.adjust_foreground =  5     # brightness
         self.adjust_background = 10     # transparency
         self.filestats = None
@@ -243,8 +243,8 @@ class MainWindow(QMainWindow, WindowMixin):
         list_layout.addWidget(colorLabel)
 
         self.colorBox = QComboBox()
-        self.set_color_pallet_options(self.colorBox)
-        self.colorBox.currentIndexChanged.connect(self.color_pallet_changed)
+        self.set_color_theme_options(self.colorBox)
+        self.colorBox.currentIndexChanged.connect(self.color_theme_changed)
         list_layout.addWidget(self.colorBox)
 
         # slider for background and foreground
@@ -346,7 +346,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.class_dock = QDockWidget(get_str('classList'), self)
         self.class_dock.setObjectName(get_str('classes'))
         self.class_dock.setWidget(class_list_container)
-        logging.info(f"self.class_list_widget = {self.class_list_widget}")
+        logging.debug(f"self.class_list_widget = {self.class_list_widget}")
 
         self.zoom_widget = ZoomWidget()
         self.color_dialog = ColorDialog(parent=self)
@@ -850,7 +850,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.show_tutorial_dialog(browser='default', link='https://github.com/tzutalin/labelImg#Hotkeys')
 
     def create_shape(self):
-        logging.info(f"-->creating shape")
+        logging.debug(f"-->creating shape")
         assert self.beginner()
         self.canvas.set_editing(False)
         self.actions.create.setEnabled(False)
@@ -1177,7 +1177,7 @@ table thead th {
         item = self.current_item()
         if not item:  # If not selected Item, take the first one
             item = self.label_list.item(self.label_list.count() - 1)
-        logging.info(f"button pressed!: {item.text()}")
+        logging.debug(f"button pressed!: {item.text()}")
 
         difficult = self.diffc_button.isChecked()
 
@@ -1206,7 +1206,6 @@ table thead th {
         self.actions.shapeFillColor.setEnabled(selected)
 
     def add_label(self, shape):
-        logging.debug(f"add_label shape = {shape.label}")
         item = HashableQListWidgetItem(shape.label)
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
         item.setCheckState(Qt.Checked)
@@ -1337,7 +1336,7 @@ table thead th {
 
     def combo_selection_changed(self, index):
         text = self.combo_box.cb.itemText(index)
-        logging.info(f"reference changed: {text}")
+        logging.debug(f"reference changed: {text}")
         # HACK workaround for now...
         if not text:
             self.update_combo_box()
@@ -1346,12 +1345,14 @@ table thead th {
 
     def label_selection_changed(self):
         item = self.current_item()
-        logging.info(f"label_selection_changed {item}")
-        logging.info(f"label_selection_changed {self.items_to_shapes}")
         if item and self.canvas.editing():
             self._no_selection_slot = True
-            self.canvas.select_shape(self.items_to_shapes[item])
-            shape = self.items_to_shapes[item]
+            if item in self.items_to_shapes:
+                shapes = self.items_to_shapes[item]
+                self.canvas.select_shape(shapes)
+            #else:
+                #logging.warning(f"item {item} not in self.items_to_shapes")
+
             # Add Chris
             #self.diffc_button.setChecked(shape.difficult)
 
@@ -1395,7 +1396,7 @@ table thead th {
     def label_item_changed(self, item):
         shape = self.items_to_shapes[item]
         label = item.text()
-        logging.info(f"label_item_changed {label}")
+        logging.debug(f"label_item_changed {label}")
         if label != shape.label:
             shape.label = item.text()
             shape.line_color = generate_color_by_text(shape.label)
@@ -1778,6 +1779,13 @@ table thead th {
             self.add_recent_file(self.image_path)
             self.toggle_actions(True)
             self.show_bounding_box_from_annotation_file(image_path)
+            imgName = Path(self.image_path).stem
+            self.active_users = self.bbl.stats.image_to_active_users_map[imgName]
+            self.ref_user_box.clear()
+            self.ref_user_box.addItems(self.active_users)
+            #AllItems = [self.ref_user_box.itemText(i) for i in range(self.ref_user_box.count())]
+            #logging.warning(f"ref_user list = {AllItems}")
+
             # ok, now that file is loaded, update combo box
             self.show_class_list_for_image_file(image_path)
 
@@ -1788,15 +1796,12 @@ table thead th {
             if self.label_list.count():
                 self.label_list.setCurrentItem(self.label_list.item(self.label_list.count() - 1))
                 self.label_list.item(self.label_list.count() - 1).setSelected(True)
-
             # get active users and enable them
-            imgName = Path(self.image_path).stem
-            active_users = self.bbl.stats.image_to_active_users_map[imgName]
             for user in self.bbl.stats.user_list:
-                if user in active_users:
-                    self.user_button[user].setEnabled(True)
+                if user in self.active_users:
+                   self.user_button[user].setEnabled(True)
                 else:
-                    self.user_button[user].setEnabled(False)
+                   self.user_button[user].setEnabled(False)
 
 
             self.canvas.setFocus()
@@ -1987,11 +1992,11 @@ table thead th {
             if self.bbl.stats.image_to_class_map[imgName]:
                 self.image_basename_to_path[imgName] = imgPath
                 self.path_to_image_basename[imgPath] = imgName
-        logging.info(f"self.image_basename_to_path = {self.image_basename_to_path}")
+        logging.debug(f"self.image_basename_to_path = {self.image_basename_to_path}")
 
         self.m_img_list = list(self.image_basename_to_path.values())
         self.img_count = len(self.m_img_list)
-        logging.info(f"self.m_img_list = {self.m_img_list}")
+        logging.debug(f"self.m_img_list = {self.m_img_list}")
         self.open_next_image()
         for imgPath in self.m_img_list:
             imgName = self.path_to_image_basename[imgPath]
@@ -2000,7 +2005,7 @@ table thead th {
 
         self.image_path = self.m_img_list[0]
         self.add_recent_file(self.image_path)
-        logging.info(f"curr_image_path = {self.image_path} recent={self.recent_files}")
+        logging.debug(f"curr_image_path = {self.image_path} recent={self.recent_files}")
 
 
     def import_dir_images(self, dir_path):
@@ -2018,11 +2023,11 @@ table thead th {
             if self.bbl.stats.image_to_class_map[imgName]:
                 self.image_basename_to_path[imgName] = imgPath
                 self.path_to_image_basename[imgPath] = imgName
-        logging.info(f"self.image_basename_to_path = {self.image_basename_to_path}")
+        logging.debug(f"self.image_basename_to_path = {self.image_basename_to_path}")
 
         self.m_img_list = list(self.image_basename_to_path.values())
         self.img_count = len(self.m_img_list)
-        logging.info(f"self.m_img_list = {self.m_img_list}")
+        logging.debug(f"self.m_img_list = {self.m_img_list}")
         self.open_next_image()
         for imgPath in self.m_img_list:
             imgName = self.path_to_image_basename[imgPath]
@@ -2337,7 +2342,7 @@ table thead th {
         imgName = Path(imgPath).stem
         self.current_image = imgName
         class_list = self.bbl.stats.image_to_class_map[imgName]
-        logging.info(f"class list for {imgName} is {class_list}")
+        logging.debug(f"class list for {imgName} is {class_list}")
         if not class_list:
             return
         self.class_list_widget.clear()
@@ -2352,19 +2357,17 @@ table thead th {
         self.class_list_widget.item(0).setSelected(True)
         # ok now set a reference user if nobody is defined
         if not self.ref_user:
-            logging.info(f"get best ref for {imgName}, {class_list[0]}")
+            logging.debug(f"get best ref for {imgName}, {class_list[0]}")
             self.ref_user = self.bbl.get_best_ref_user(imgName, class_list[0])
             # update widget as well..assume order of user_list
             if not self.ref_user:
                 return
-            logging.info(f"self.ref_user = {self.ref_user}")
             index = list(self.bbl.stats.user_list).index(self.ref_user)
-            logging.info(f"index = {index}")
             self.ref_user_box.setCurrentIndex(index)
 
             #self.staff_buttons[self.ref_user].setToolTip(f"{self.ref_user} has the most annotations for this image")
-            logging.info(f"{self.ref_user} has the most annotations for this image: setting as ref")
-            logging.info(f"ref_user = {self.ref_user} ")
+            logging.debug(f"{self.ref_user} has the most annotations for this image: setting as ref")
+            logging.debug(f"ref_user = {self.ref_user} ")
 
 
     # iou filter value changed
@@ -2375,12 +2378,12 @@ table thead th {
             self.draw_iou_boxes()
 
 
-    # trigger update on new color scheme
-    def color_pallet_changed(self):
+    # trigger update on new color theme
+    def color_theme_changed(self):
         # get color scheme from combo box
         txt = self.colorBox.currentText()
-        if self.color_pallet != txt:
-            self.color_pallet = txt
+        if self.color_theme != txt:
+            self.color_theme = txt
             self.draw_iou_boxes()
 
     def adjust_background_changed(self):
@@ -2397,20 +2400,20 @@ table thead th {
             self.adjust_foreground = value
             self.draw_iou_boxes()
 
-    def set_color_pallet_options(self, widget):
+    def set_color_theme_options(self, widget):
         # set the options and also set default
-        c = ColorScheme()
-        pallet_list = c.get_list_of_palletnames()
+        c = ColorPalette()
+        theme_list = c.get_list_of_themes()
         index = 0
-        for palletname in pallet_list:
-            widget.addItem(palletname)
-            if palletname == self.color_pallet:
+        for themename in theme_list:
+            widget.addItem(themename)
+            if themename == self.color_theme:
                 self.colorBox.setCurrentIndex(index)
             index += 1
 
 
     def btnstate(self, state):
-        logging.info(f"state = {state}")
+        logging.debug(f"state = {state}")
         
         #b = state
         #logging.info(f"user = {user} button pressed {b.text()} checked={b.isChecked()}")
@@ -2420,22 +2423,23 @@ table thead th {
 
     def class_item_double_clicked(self, item=None):
         class_base = item.text()
-        logging.info(f"class item selected : {class_base}")
+        logging.debug(f"class item selected : {class_base}")
         self.draw_iou_boxes()
             
     def draw_iou_boxes(self, force_draw=False):
-        logging.info(f"draw -----------------------------------------")
+        logging.debug(f"draw -----------------------------------------")
         if self.class_list_widget.selectedItems().__len__() == 0:
-            logging.info(f"draw: no class selected")
+            logging.debug(f"draw: no class selected")
             return
 
         if not self.current_image:
-            logging.info(f"draw: no image selected")
+            logging.debug(f"draw: no image selected")
             return
 
         class_base = self.class_list_widget.selectedItems()[0].text()
         image = self.current_image
-        self.ref_user = self.ref_user_box.currentText()
+        #self.ref_user = self.ref_user_box.currentText()
+        #logging.warning(f"ref user changed to {self.ref_user}")
 
         visible_users = {}
         active_users = self.bbl.stats.image_to_active_users_map[image]
@@ -2450,19 +2454,19 @@ table thead th {
         for class_type in self.bbl.stats.class_type_list:
             visible_types[class_type] = self.class_type_button[class_type].isChecked()
 
-        dobj = DrawObject(image, class_base, self.ref_user, visible_types, visible_users, self.iou_filter_value,
-                        self.color_pallet , self.adjust_background, self.adjust_foreground,)
+        dobj = DrawObject(image, class_base, self.ref_user, visible_types, active_users, visible_users, self.iou_filter_value,
+                        self.color_theme , self.adjust_background, self.adjust_foreground,)
         if force_draw or dobj != self.current_draw_object:
             self.current_draw_object = dobj
-            logging.info(f"draw: new draw object {dobj}")
+            logging.debug(f"draw: new draw object {dobj}")
             self.draw_overlay_on_canvas()
             self.update_widgets_with_overlay_stats()
         else:
-            logging.info(f"draw: nothing to do : same settings {dobj}")
+            logging.debug(f"draw: nothing to do : same settings {dobj}")
 
     def draw_overlay_on_canvas(self):
         if self.current_draw_object.image != self.current_image:
-            logging.info(f"mismatch background image")
+            logging.debug(f"mismatch background image")
             return
         img_data = self.pl.fetch_overlay_image(self.current_draw_object)
         qimg = QImage()
@@ -2489,7 +2493,6 @@ table thead th {
 
     def staff_button_toggled(self, user):       
         self.ref_user = user
-        logging.info(f"staff button {user} toggled")
         self.draw_iou_boxes()
         
 

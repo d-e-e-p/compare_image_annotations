@@ -17,7 +17,7 @@ from random import choice, randint
 
 from lib.Bbox   import Bbox, DeepDict
 from lib.Bbox   import BboxList
-from lib.ColorScheme import ColorScheme
+from lib.ColorPalette import ColorPalette
 
 
 import pudb
@@ -26,18 +26,20 @@ sys.tracebacklimit = None
 
 
 class DrawObject(object):
-    def __init__(self, image, class_base, ref_user, visible_types, visible_users, iou_filter_value,
-            color_pallet, adjust_background, adjust_foreground):
+    def __init__(self, image, class_base, ref_user, visible_types, active_users, visible_users, iou_filter_value,
+            color_theme, adjust_background, adjust_foreground):
         self.image = image
         self.class_base = class_base
         self.ref_user = ref_user
         self.visible_types = visible_types
+        self.active_users = active_users
         self.visible_users = visible_users
         self.iou_filter_value = iou_filter_value
-        self.color_pallet  = color_pallet
+        self.color_theme  = color_theme
         self.adjust_background  = adjust_background
         self.adjust_foreground  = adjust_foreground
         self.overlay_stats =  DeepDict(DeepDict((lambda: 0)))
+        
 
 
     # yeah not reccomended but works in this case...
@@ -54,7 +56,7 @@ class DrawObject(object):
 
 
     def __str__(self):
-        return f"i={self.image} c={self.class_base} ru={self.ref_user} vt={self.visible_types} vu={self.visible_users} cs={self.color_pallet} ab={self.adjust_background} af={self.adjust_foreground}"
+        return f"i={self.image} c={self.class_base} ru={self.ref_user} vt={self.visible_types} vu={self.visible_users} cs={self.color_theme} ab={self.adjust_background} af={self.adjust_foreground}"
 
 class Plotter:
     def __init__(self, bbl, args):
@@ -62,14 +64,14 @@ class Plotter:
         self.bbl = bbl
         self.margin_x = 100
         self.margin_y = 200
-        self.color_scheme  = ColorScheme()
-        self.color_pallet  = "Bold" # initial pallet
+        self.color_palette  = ColorPalette()
+        self.color_theme  = "dark" # initial theme
         self.user_to_color = {}
         self.source_img = defaultdict(lambda: None)
         self.img_list = bbl.get_image_list()
         self.read_images()
         self.add_margins()
-        self.assign_colors_to_users()
+        self.assign_colors_to_users(self.bbl.stats.user_list)
         self.fnt = self.get_fonts();
         self.plot_iou_boxes(bbl, args.out)
 
@@ -121,9 +123,9 @@ class Plotter:
                 font_path = 'resources/fonts/'
 
         if exists(font_path):
-            logging.info(f" font_path all OK: {font_path}")
+            logging.debug(f" font_path all OK: {font_path}")
         else:
-            logging.info(f" font_path missing : {font_path}")
+            logging.error(f" font_path missing : {font_path}")
             print(f" font_path missing : {font_path}")
             sys.exit(-1)
 
@@ -137,16 +139,16 @@ class Plotter:
             raise Exception("font error: ")
         return fnt
 
-    def assign_colors_to_users(self):
+    def assign_colors_to_users(self, users):
 
-        logging.info(f" - color_pallet = {self.color_pallet}") 
-        num_users = len(self.bbl.stats.user_list)
-        color_list = self.color_scheme.get_colors_for_pallet(self.color_pallet, num_users)
-        logging.info(f" color_list = {color_list}")
+        num_users = len(users)
+        color_list = self.color_palette.get_colors_for_palette(self.color_theme, num_users)
+        logging.debug(f" for {num_users} with {self.color_theme}  color_list = {color_list}")
 
         # cycle thru color_list is num_users > color_list
         i = 0
-        for user in self.bbl.stats.user_list:
+        #for user in self.bbl.stats.user_list:
+        for user in users:
             self.user_to_color[user] = color_list[i]
             i += 1
             if i == len(color_list):
@@ -205,16 +207,16 @@ image = {image_name} class = {cls}
        look for a property on obj_list of ref user for associated user
        skip warning for zero annotation
        """
-       logging.info(f"obj_list: = {obj_list:}")
+       #logging.debug(f"obj_list: = {obj_list:}")
        for obj in obj_list:
             missing_users = list(set(self.bbl.stats.user_list).difference(obj.associated_user))
-            logging.info(f"missing_users1 = {missing_users}")
+            #logging.debug(f"missing_users1 = {missing_users}")
             if dset.ref_user in missing_users:
                 missing_users.remove(dset.ref_user)
-            logging.info(f"missing_users2 = {missing_users}")
+            #logging.debug(f"missing_users2 = {missing_users}")
             # remove not visible
             missing_users = list(filter(lambda user: dset.visible_users[user], missing_users))
-            logging.info(f"missing_users3 = {missing_users}")
+            #logging.debug(f"missing_users3 = {missing_users}")
 
             # remove with no annotations at all
             missing_users_loop = missing_users
@@ -222,7 +224,7 @@ image = {image_name} class = {cls}
                 userclass = f"{user}_outer"
                 if dset.overlay_stats['userclass'][userclass] == 0:
                     missing_users.remove(user)
-            logging.info(f"missing_users4 = {missing_users}")
+            #logging.debug(f"missing_users4 = {missing_users}")
 
 
             # filter for count
@@ -231,11 +233,11 @@ image = {image_name} class = {cls}
                 txt = f"Missing {obj.class_base} {obj.class_type} from\n" + "\n".join(missing_users)
                 xloc, yloc = self.get_random_nearby_loc(obj.bbox);
                 img.multiline_text((xloc,yloc), txt , font=self.fnt['bold'], fill=color)
-                logging.info(f"missing {txt} au={obj.associated_user}")
+                #logging.debug(f"missing {txt} au={obj.associated_user}")
 
 
     def fetch_overlay_image(self, dset):
-       
+
         # what's the size of thie image?
         width, height = self.source_img[dset.image].size
         imgobj = Image.new('RGBA', (width, height), (255, 0, 0, 0))
@@ -250,6 +252,8 @@ image = {image_name} class = {cls}
         bbox = [width - self.margin_x, height - self.margin_y , width, 0]
         img.rectangle(bbox, fill='black', outline='white', width=1)
 
+        # update colors
+        self.assign_colors_to_users(dset.active_users)
 
         # first filter based on matching image/class
         filter_criteria = {}
@@ -265,10 +269,10 @@ image = {image_name} class = {cls}
             obj_list = self.bbl.filter_by_iou_value(obj_list, dset.ref_user,  dset.iou_filter_value)
 
 
-        # ok now update color pallet
-        if self.color_pallet != dset.color_pallet:
-            self.color_pallet = dset.color_pallet
-            self.assign_colors_to_users()
+        # ok now update color theme
+        if self.color_theme != dset.color_theme:
+            self.color_theme = dset.color_theme
+            self.assign_colors_to_users(dset.active_users)
 
         # reset stats
         dset.overlay_stats['outer_assoc']['associated'] = 0
@@ -345,9 +349,9 @@ image = {image_name} class = {cls}
         txt = self.get_text_for_report_line(max_username, 0, 0, u_count, max_username)
         cell_width, cell_height = img.textsize(txt, self.fnt['bold'])
         max_txt_len = len(txt) # needed much later
-        logging.info(f"based on txt={txt}")
-        logging.info(f"max_txt_len={max_txt_len}")
-        logging.info(f"cell_width={cell_width}")
+        #logging.info(f"based on txt={txt}")
+        #logging.info(f"max_txt_len={max_txt_len}")
+        #logging.info(f"cell_width={cell_width}")
 
 
         # ok, now compute total needed space based on that
@@ -463,7 +467,7 @@ image = {image_name} class = {cls}
                     dset.overlay_stats['iou_min'][user] = iou_value
                 #logging.info(f" iou[{dset.ref_user}] for {user} = {iou_value} min={ dset.overlay_stats['iou_min'][user]} max={dset.overlay_stats['iou_max'][user]}")
 
-        logging.info(f" stats = {dset.overlay_stats}")
+        logging.debug(f" stats = {dset.overlay_stats}")
         #import pdb; pdb.set_trace()
 
                     
@@ -499,7 +503,6 @@ image = {image_name} class = {cls}
 
         # ok now handle the inout case
         else:
-            logging.info(f" handling 'inout' case")
             for obj in obj_list:
                 if obj.has_associated_inner :
 
