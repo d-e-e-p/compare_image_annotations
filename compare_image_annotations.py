@@ -13,6 +13,7 @@ import logging
 import colorama
 from colorama import Fore, Back, Style
 import shlex
+from pathlib import Path
 
 from PySide6.QtWidgets import (QLineEdit, QPushButton, QApplication, QVBoxLayout, QDialog)
 
@@ -83,8 +84,11 @@ def setup_logging(args):
         stream_handler.setFormatter(CustomFormatter(type='short',color=True))
     log.addHandler(stream_handler)
 
-    logFilePath = os.path.join(args.out, "debug.log")
-    file_handler = logging.FileHandler(filename=logFilePath)
+
+    log_file_path = os.path.join(args.out, "debug.log")
+    Path(log_file_path).unlink(missing_ok=True)
+
+    file_handler = logging.FileHandler(filename=log_file_path)
     file_handler.setFormatter(CustomFormatter(type='long',color=False))
     file_handler.setLevel(logging.DEBUG)
     log.addHandler(file_handler)
