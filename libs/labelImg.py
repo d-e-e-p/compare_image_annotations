@@ -2335,6 +2335,15 @@ table thead th {
     def toggle_draw_square(self):
         self.canvas.set_drawing_shape_to_square(self.draw_squares_option.isChecked())
 
+    def update_ref_user(self, imgName, class_base):
+        logging.debug(f"get best ref for {imgName}, {class_base}")
+        self.ref_user = self.bbl.get_best_ref_user(imgName, class_base)
+        logging.debug(f"{self.ref_user} has the most annotations for this image: setting as ref")
+        # update widget as well..assume order of user_list
+        if not self.ref_user:
+            return
+        self.ref_user_box.setCurrentText(self.ref_user)
+
     def show_class_list_for_image_file(self, imgPath):
         """
         retrieve classes that match an image
@@ -2357,17 +2366,11 @@ table thead th {
         self.class_list_widget.item(0).setSelected(True)
         # ok now set a reference user if nobody is defined
         if not self.ref_user:
-            logging.debug(f"get best ref for {imgName}, {class_list[0]}")
-            self.ref_user = self.bbl.get_best_ref_user(imgName, class_list[0])
-            # update widget as well..assume order of user_list
-            if not self.ref_user:
-                return
-            index = list(self.bbl.stats.user_list).index(self.ref_user)
-            self.ref_user_box.setCurrentIndex(index)
+            self.update_ref_user(imgName,class_list[0])
+        if not self.ref_user:
+            return
 
             #self.staff_buttons[self.ref_user].setToolTip(f"{self.ref_user} has the most annotations for this image")
-            logging.debug(f"{self.ref_user} has the most annotations for this image: setting as ref")
-            logging.debug(f"ref_user = {self.ref_user} ")
 
 
     # iou filter value changed
@@ -2438,8 +2441,6 @@ table thead th {
 
         class_base = self.class_list_widget.selectedItems()[0].text()
         image = self.current_image
-        #self.ref_user = self.ref_user_box.currentText()
-        #logging.warning(f"ref user changed to {self.ref_user}")
 
         visible_users = {}
         active_users = self.bbl.stats.image_to_active_users_map[image]
@@ -2448,6 +2449,16 @@ table thead th {
                 visible_users[user] = self.user_button[user].isChecked()
             else:
                 visible_users[user] = False
+        ref_user = str(self.ref_user_box.currentText())
+        if ref_user not in active_users:
+            logging.debug(f"ref user '{ref_user}' not in {active_users}.. before:{self.ref_user}")
+            self.update_ref_user(image,class_base)
+        else:
+            self.ref_user = ref_user
+
+        if not self.ref_user:
+            logging.warning(f"no ref user")
+            return
 
         # class type
         visible_types = {}
