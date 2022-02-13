@@ -116,7 +116,7 @@ class Plotter:
         if getattr(sys, 'frozen', False):
             application_path = sys._MEIPASS
         else:
-            application_path = dirname(abspath(__file__))
+            application_path = dirname(dirname(abspath(__file__)))
         return application_path
 
     def get_fonts(self):
