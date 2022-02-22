@@ -346,15 +346,15 @@ class BboxList:
         for image in self.stats.image_list:
             obj_list_f = self.filter(obj_list,  image = image)
             for obj in obj_list_f:
-
-                max_iou_same = max(obj.iou.values())
-                if max_iou_same < iou_threshold['same_class']:
-                    obj_list_f = self.rfilter(obj_list_f, class_base = obj.class_base)
-                    max_iou_diff, max_iou_userclass = self.compute_iou_obj_list(obj, obj_list_f)
-                    if max_iou_diff > iou_threshold['diff_class']:
-                        # potential mis-label!
-                        obj.warning = f"{obj.class_base} by {obj.user}\n{max_iou_userclass}"
-                        txt = f"{image}: {obj.class_base} by {obj.user} vs {max_iou_userclass}"
-                        logging.info(txt)
+                if obj.iou.values():
+                    max_iou_same = max(obj.iou.values())
+                    if max_iou_same < iou_threshold['same_class']:
+                        obj_list_f = self.rfilter(obj_list_f, class_base = obj.class_base)
+                        max_iou_diff, max_iou_userclass = self.compute_iou_obj_list(obj, obj_list_f)
+                        if max_iou_diff > iou_threshold['diff_class']:
+                            # potential mis-label!
+                            obj.warning = f"{obj.class_base} by {obj.user}\n{max_iou_userclass}"
+                            txt = f"{image}: {obj.class_base} by {obj.user} vs {max_iou_userclass}"
+                            logging.info(txt)
             
     
