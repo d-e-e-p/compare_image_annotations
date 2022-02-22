@@ -25,8 +25,7 @@ ENCODE_METHOD = DEFAULT_ENCODING
 
 from lib.Bbox   import Bbox
 from lib.Bbox   import BboxList
-from libs.plantData import PLANT_NAMES, TYPE_NAMES, PLANT_TYPE_NAMES, PLANT_COLORS
-from libs.plantData import split_name_into_plant_and_type, has_valid_suffix
+from libs.plantData import plantData
 
 class Parser:
     def __init__(self, bbl, args) :
@@ -130,12 +129,12 @@ class Parser:
             #logging.info(f" {basename}: replaced meristem so {text} -> {out}")
             text = out
 
-        if not has_valid_suffix(text):
+        if not plantData.has_valid_suffix(text):
             out = text + "_outer"
             logging.info(f" {basename}: missing valid type suffix so assuming {text} -> {out}")
             text = out
 
-        if text not in PLANT_TYPE_NAMES:
+        if text not in plantData.planttype_names:
             logging.warning(f" {basename}: label {text} not in standard label types: {PLANT_TYPE_NAMES}")
 
         return text
@@ -191,7 +190,7 @@ class Parser:
         image    = stem
         img_size = root.find('size')
 
-        attr = "username timestamp image_sha256 xmlpath path folder path".split()
+        attr = "username timestamp image_sha256 xmlpath path folder".split()
         for key in attr:
             if root.find(key) is not None:
                 value = root.find(key).text
@@ -222,7 +221,7 @@ class Parser:
             xmax = int(bbox.find('xmax').text)
             ymax = int(bbox.find('ymax').text)
 
-            class_base, class_type_name = split_name_into_plant_and_type(class_name)
+            class_base, class_type_name = plantData.split_name_into_plant_and_type(class_name)
 
             if class_type_name != 'outer' and class_type_name != 'stem':     
                 logging.error(f"class name should end in _outer or _stem: {class_name}")

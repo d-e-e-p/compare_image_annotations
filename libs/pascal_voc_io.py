@@ -20,8 +20,7 @@ import hashlib
 XML_EXT = '.xml'
 ENCODE_METHOD = DEFAULT_ENCODING
 
-from libs.plantData import PLANT_NAMES, TYPE_NAMES, PLANT_TYPE_NAMES, PLANT_COLORS
-from libs.plantData import split_name_into_plant_and_type, has_valid_suffix
+from libs.plantData import plantData
 
 class FileStats:
     pass
@@ -101,15 +100,16 @@ class PascalVocWriter:
         setattr(self.filestats, "filename" , filename)
 
         cname, cplant, ctype = self.count_objects()
-        SubElement(top, 'name_count').text = f"{cname.most_common()}"
-        SubElement(top, 'plant_count').text = f"{cplant.most_common()}"
-        SubElement(top, 'type_count').text  = f"{ctype.most_common()}"
+        counts = SubElement(top, 'counts')
+        SubElement(counts, 'name_count').text = f"{cname.most_common()}"
+        SubElement(counts, 'plant_count').text = f"{cplant.most_common()}"
+        SubElement(counts, 'type_count').text  = f"{ctype.most_common()}"
 
         if self.xmlfile is not None:
             SubElement(top, 'xmlpath').text = self.xmlfile
 
         if self.local_img_path is not None:
-            SubElement(top, 'imgpath').text = self.local_img_path
+            SubElement(top, 'path').text = self.local_img_path
             checksum = self.sha256sum(self.local_img_path)
             SubElement(top, 'image_sha256').text = checksum
 
@@ -150,7 +150,7 @@ class PascalVocWriter:
         ctype  = Counter()
         for name in namelist:
             cname[name] += 1
-            plant, type = split_name_into_plant_and_type(name)
+            plant, type = plantData.split_name_into_plant_and_type(name)
             cplant[plant] += 1
             ctype[type] += 1
 
@@ -237,7 +237,7 @@ class PascalVocReader:
         """
         text = text.lower()
         basename = Path(file).name
-        #logging.debug(f" {basename}: fixing  {text}")
+        logging.debug(f" {basename}: fixing  {text}")
         if '-' in text:
             out = text.replace('-','_')
             logging.info(f" {basename}: replaced dash so {text} -> {out}")
@@ -248,15 +248,12 @@ class PascalVocReader:
             #logging.info(f" {basename}: replaced meristem so {text} -> {out}")
             text = out
 
-        if not has_valid_suffix(text):
+        if not plantData.has_valid_suffix(text):
             out = text + "_outer"
             logging.info(f" {basename}: missing valid type suffix so assuming {text} -> {out}")
             text = out
 
-        if text not in PLANT_TYPE_NAMES:
-            logging.warning(f" {basename}: label {text} not in standard label types: {PLANT_TYPE_NAMES}")
-
-        #logging.debug(f" {basename}: returning  {text}")
+        logging.debug(f" {basename}: returning  {text}")
         return text
         
 
@@ -275,7 +272,7 @@ class PascalVocReader:
         except KeyError:
             self.verified = False
 
-        attr = "username timestamp image_sha256".split()
+        attr = "username timestamp image_sha256 xmlpath path folder".split()
         for key in attr:
             if xml_tree.find(key) is not None:
                 value = xml_tree.find(key).text
@@ -288,7 +285,7 @@ class PascalVocReader:
             bnd_box = object_iter.find("bndbox")
             label = object_iter.find('name').text
             label = self.fix_labels(self.file_path, label)
-            #logging.debug(f"fix_label = {label}")
+            logging.debug(f"fix_label = {label}")
             if object_iter.find('note') is not None:
                 note = object_iter.find('note').text
             else:

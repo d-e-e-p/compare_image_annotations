@@ -14,11 +14,11 @@ DEFAULT_VERTEX_FILL_COLOR = QColor(0, 255, 0, 255)
 DEFAULT_HVERTEX_FILL_COLOR = QColor(255, 0, 0)
 
 def get_font(size, style):
-    logging.info(f" font {size} {style}")
-    font = QFont()            ; logging.info(f"1  font = {font}") 
-    font.setPointSize(size)   ; logging.info(f"2  font = {font} size={size}") 
-    font.setStyleHint(style)  ; logging.info(f"3  font = {font} style={style}")
-    font.setBold(True)        ; logging.info(f"4  font = {font}") 
+    logging.debug(f" font {size} {style}")
+    font = QFont()            ; logging.debug(f"1  font = {font}") 
+    font.setPointSize(size)   ; logging.debug(f"2  font = {font} size={size}") 
+    font.setStyleHint(style)  ; logging.debug(f"3  font = {font} style={style}")
+    font.setBold(True)        ; logging.debug(f"4  font = {font}") 
     return font
 
 
@@ -69,6 +69,7 @@ class Shape(object):
             # with an object attribute. Currently this
             # is used for drawing the pending line a different color.
             self.line_color = line_color
+        logging.debug(f"Shape init with label = {label}")
 
 
     def close(self):

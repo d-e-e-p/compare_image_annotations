@@ -1,6 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import argparse
 import codecs
 import distutils.spawn
 import os.path
@@ -12,7 +11,9 @@ import shutil
 import webbrowser as wb
 import logging
 from enum import Enum
+import argparse
 from pathlib import Path
+from types import SimpleNamespace
 
 
 import colorama
@@ -44,10 +45,9 @@ from libs.combobox import ComboBox
 from libs.default_label_combobox import DefaultLabelComboBox, DefaultPlantComboBox, DefaultTypeComboBox
 from libs.constants import *
 from libs.resources import *
-from libs.utils import (Struct, add_actions, format_shortcut, generate_color_by_text, 
-                        natural_sort, new_action, new_icon)
+from libs.utils import *
 from libs.settings import Settings
-from libs.shape import Shape, DEFAULT_LINE_COLOR, DEFAULT_FILL_COLOR
+from libs.shape import Shape, DEFAULT_LINE_COLOR, DEFAULT_FILL_COLOR, get_font
 from libs.stringBundle import StringBundle
 from libs.canvas import Canvas
 from libs.zoomWidget import ZoomWidget
@@ -64,8 +64,8 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
-from libs.plantData import PLANT_NAMES, TYPE_NAMES, PLANT_TYPE_NAMES, PLANT_COLORS
-from libs.plantData import split_name_into_plant_and_type
+from libs.plantData import plantData
+#from libs.CustomFormatter import CustomFormatter
 
 #__appname__ = 'labelImg'
 __appname__ = 'compare_image_annotations'
@@ -156,9 +156,9 @@ class MainWindow(QMainWindow, WindowMixin):
         # Load predefined classes to the list
         #self.load_predefined_classes(default_prefdef_class_file)
 
-        self.plant_hist  = PLANT_NAMES
-        self.type_hist  =  TYPE_NAMES
-        self.label_hist =  PLANT_TYPE_NAMES 
+        self.plant_hist  = plantData.plant_names
+        self.type_hist  =  plantData.type_names
+        self.label_hist =  plantData.planttype_names 
 
         self.annotation_opacity = 7
 
@@ -177,6 +177,14 @@ class MainWindow(QMainWindow, WindowMixin):
         self.prev_plant_text = ''
         self.prev_type_text = ''
         self.noise = False
+
+        # fonts etc
+        self.bfont = get_font(8,  QFont.Monospace)
+        self.bfont.setBold(True)
+
+        self.nfont  = get_font(8,  QFont.Monospace)
+        self.nfont.setBold(False)
+        self.nfont.setStrikeOut(True)
 
 
         list_layout = QVBoxLayout()
@@ -382,10 +390,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.addDockWidget(Qt.RightDockWidgetArea, self.annotation_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.class_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
-        self.file_dock.setFeatures(QDockWidget.DockWidgetFloatable)
-
-        self.dock_features = QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable
-        self.annotation_dock.setFeatures(self.annotation_dock.features() ^ self.dock_features)
+        self.file_dock.setFeatures(QDockWidget.DockWidgetFloatable|QDockWidget.DockWidgetMovable)
+        self.annotation_dock.setFeatures(QDockWidget.DockWidgetFloatable|QDockWidget.DockWidgetMovable)
 
         # Actions
         action = partial(new_action, self)
@@ -486,9 +492,9 @@ class MainWindow(QMainWindow, WindowMixin):
                                              format_shortcut("Ctrl+Wheel")))
         self.zoom_widget.setEnabled(False)
 
-        zoom_in = action(get_str('zoomin'), partial(self.add_zoom, 10),
+        zoom_in = action(get_str('zoomin'), partial(self.add_zoom_mult, 0.1),
                          'Ctrl++', 'zoom-in', get_str('zoominDetail'), enabled=False)
-        zoom_out = action(get_str('zoomout'), partial(self.add_zoom, -10),
+        zoom_out = action(get_str('zoomout'), partial(self.add_zoom_mult, -0.1),
                           'Ctrl+-', 'zoom-out', get_str('zoomoutDetail'), enabled=False)
         zoom_sel = action(get_str('zoomsel'), self.zoom_to_selection,
                           'z', 'zoom-area', get_str('zoomselDetail'), enabled=False)
@@ -507,6 +513,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.scalers = {
             self.ZoomMode.FIT_WINDOW: self.scale_fit_window,
             self.ZoomMode.FIT_WIDTH: self.scale_fit_width,
+            self.ZoomMode.ZOOM_TO_AREA: lambda: 1,
             # Set to one to scale to 100% when loading files.
             self.ZoomMode.MANUAL_ZOOM: lambda: 1,
         }
@@ -587,7 +594,7 @@ class MainWindow(QMainWindow, WindowMixin):
         Shape.paint_note = self.display_note_option.isChecked()
 
         add_actions(self.menus.file,
-                    (open, open_dir, change_save_dir, open_annotation, copy_prev_bounding, self.menus.recentFiles, save, save_format, save_as, close, reset_all, delete_image, quit))
+                    (open, open_dir, change_save_dir, open_annotation, copy_prev_bounding, self.menus.recentFiles, save, save_format, save_as, close, reset_all, quit))
         add_actions(self.menus.help, (help_default, show_info, show_shortcut))
         add_actions(self.menus.view, (
             self.auto_saving,
@@ -597,7 +604,7 @@ class MainWindow(QMainWindow, WindowMixin):
             labels, advanced_mode, None,
             hide_all, show_all, None,
             zoom_in, zoom_out, zoom_sel, zoom_org, None,
-            fit_window, fit_width ))
+            fit_window, fit_width))
 
         self.menus.file.aboutToShow.connect(self.update_file_menu)
 
@@ -740,9 +747,9 @@ class MainWindow(QMainWindow, WindowMixin):
         if value:
             self.actions.createMode.setEnabled(True)
             self.actions.editMode.setEnabled(False)
-            self.annotation_dock.setFeatures(self.annotation_dock.features() | self.dock_features)
-        else:
-            self.annotation_dock.setFeatures(self.annotation_dock.features() ^ self.dock_features)
+        #    self.annotation_dock.setFeatures(self.annotation_dock.features() | self.dock_features)
+        #else:
+        #   self.annotation_dock.setFeatures(self.annotation_dock.features() ^ self.dock_features)
 
     def populate_mode_actions(self):
         if self.beginner():
@@ -929,8 +936,8 @@ class MainWindow(QMainWindow, WindowMixin):
         alpha = 0-255 annotation_opacity : 0 to 10
         """
         alpha = self.annotation_opacity * 255 / 10.0
-        if text in PLANT_COLORS:
-            color = QColor(PLANT_COLORS[text])
+        if text in plantData.plant_colors:
+            color = QColor(plantData.plant_colors[text])
             color.setAlpha(alpha)
         else:
             color = generate_color_by_text(text)
@@ -1027,14 +1034,24 @@ class MainWindow(QMainWindow, WindowMixin):
   <tr><td>annotation</td><td>{self.annotation_path}</td></tr>
         """
 
+        keymap = {
+            'username'  : 'username', 
+            'timestamp' : 'timestamp', 
+            'xmlpath'   : 'orig annotation', 
+            'path'      : 'orig image',}
 
         if self.filestats is not None:
-            attr = "username timestamp".split()
+            attr = "username timestamp xmlpath path".split()
             for key in attr:
                 if hasattr(self.filestats, key):
                     value = getattr(self.filestats, key)
                     if value is not None:
-                        text += f'<tr><td>{key}</td><td>{value}</td></tr>'
+                        keystr = keymap[key] 
+                        if key == "xmlpath" and value == self.annotation_path:
+                            continue
+                        if key == "path" and value == self.image_path:
+                            continue
+                        text += f'<tr><td>{keystr}</td><td>{value}</td></tr>'
 
         text += f"""
 </body>
@@ -1055,7 +1072,7 @@ class MainWindow(QMainWindow, WindowMixin):
 <thead>
   <tr>"""
         text += f"<th>plant</th>"
-        for type in TYPE_NAMES:
+        for type in plantData.type_names:
             text += f"<th>{type}</th>"
         text += f"<th>total</th>"
 
@@ -1064,7 +1081,7 @@ class MainWindow(QMainWindow, WindowMixin):
         for plant, tcount in cplant.most_common():
             color = self.get_fg_color(plant + "_outer" ).name()
             text += f'<tr><td style="color: {color};">{plant}</td>'
-            for type in TYPE_NAMES:
+            for type in plantData.type_names:
                 count = cplantType[plant][type]
                 text += f"<td>{count}</td>"
                 #logging.debug(f" cplantType[{plant}][{type}] =  {count}")
@@ -1141,7 +1158,7 @@ table thead th {
         ctype  = Counter()
         for name in namelist:
             cname[name] += 1
-            plant, type = split_name_into_plant_and_type(name)
+            plant, type = plantData.split_name_into_plant_and_type(name)
             cplant[plant] += 1
             ctype[type] += 1
         
@@ -1150,7 +1167,7 @@ table thead th {
             cplantType[plant] = Counter()
 
         for name in namelist:
-            plant, type = split_name_into_plant_and_type(name)
+            plant, type = plantData.split_name_into_plant_and_type(name)
             cplantType[plant][type] += 1
 
         return cname, cplant, ctype, cplantType
@@ -1304,26 +1321,26 @@ table thead th {
         # Can add different annotation formats here
         try:
             if self.label_file_format == LabelFileFormat.PASCAL_VOC:
-                if annotation_path[-4:].lower() != ".xml":
-                    annotation_path += XML_EXT
-                self.annotation_path = annotation_path + annotation_path
+                if annotation_file_path[-4:].lower() != ".xml":
+                    annotation_file_path += XML_EXT
+                self.annotation_path = annotation_file_path + annotation_file_path
                 self.update_footer_text()
-                self.label_file.save_pascal_voc_format(annotation_path, shapes, self.image_path, self.image_data,
+                self.label_file.save_pascal_voc_format(annotation_file_path, shapes, self.image_path, self.image_data,
                                                        self.line_color.getRgb(), self.fill_color.getRgb())
             elif self.label_file_format == LabelFileFormat.YOLO:
-                if annotation_path[-4:].lower() != ".txt":
-                    annotation_path += TXT_EXT
-                self.label_file.save_yolo_format(annotation_path, shapes, self.image_path, self.image_data, self.label_hist,
+                if annotation_file_path[-4:].lower() != ".txt":
+                    annotation_file_path += TXT_EXT
+                self.label_file.save_yolo_format(annotation_file_path, shapes, self.image_path, self.image_data, self.label_hist,
                                                  self.line_color.getRgb(), self.fill_color.getRgb())
             elif self.label_file_format == LabelFileFormat.CREATE_ML:
-                if annotation_path[-5:].lower() != ".json":
-                    annotation_path += JSON_EXT
-                self.label_file.save_create_ml_format(annotation_path, shapes, self.image_path, self.image_data,
+                if annotation_file_path[-5:].lower() != ".json":
+                    annotation_file_path += JSON_EXT
+                self.label_file.save_create_ml_format(annotation_file_path, shapes, self.image_path, self.image_data,
                                                       self.label_hist, self.line_color.getRgb(), self.fill_color.getRgb())
             else:
-                self.label_file.save(annotation_path, shapes, self.image_path, self.image_data,
+                self.label_file.save(annotation_file_path, shapes, self.image_path, self.image_data,
                                      self.line_color.getRgb(), self.fill_color.getRgb())
-            logging.info('Image:{0} -> Annotation:{1}'.format(self.image_path, annotation_path))
+            logging.info('Image:{0} -> Annotation:{1}'.format(self.image_path, annotation_file_path))
             return True
         except LabelFileError as e:
             self.error_message(u'Error saving label data', u'<b>%s</b>' % e)
@@ -1333,6 +1350,20 @@ table thead th {
         self.add_label(self.canvas.copy_selected_shape())
         # fix copy and delete
         self.shape_selection_changed(True)
+
+    # TODO: move is_weed and is_outer to plantData
+    def is_weed(self, text):
+        matches = ["carrot", "spinach", "unknown"]
+        if any(x in text for x in matches):
+            return False
+        else:
+            return True
+
+    def is_outer(self, text):
+        if "_outer" in text:
+            return True
+        else:
+            return False
 
     def combo_selection_changed(self, index):
         text = self.combo_box.cb.itemText(index)
@@ -1396,15 +1427,20 @@ table thead th {
     def label_item_changed(self, item):
         shape = self.items_to_shapes[item]
         label = item.text()
-        logging.debug(f"label_item_changed {label}")
+        logging.debug(f"label_item_changed label = {label} shape.label = {shape.label}")
         if label != shape.label:
             shape.label = item.text()
-            shape.line_color = generate_color_by_text(shape.label)
+            shape.line_color = self.get_color(shape.label)
             self.set_dirty()
         else:  # User probably changed item visibility
             self.canvas.set_shape_visible(shape, item.checkState() == Qt.Checked)
 
     # Callback functions:
+    def moved_shape(self):
+        self.canvas.selected_shape.user = self.username
+        self.set_dirty()
+        
+
     def new_shape(self):
         """Pop-up and give focus to the label editor.
 
@@ -1501,7 +1537,50 @@ table thead th {
 
     def add_zoom(self, increment=10):
         self.set_zoom(self.zoom_widget.value() + increment)
-        self.zoom_mode = self.MANUAL_ZOOM
+
+    def add_zoom_mult(self, multiplier=0.1):
+        """
+        10% zoom:
+                   min          value   max
+        old:        [------------[======pstep======]------]
+        zoom:       [------------[======pstep======]-------------]
+        shift:      [---------------[======pstep======]----------]
+
+        with 10% zoom in:
+            new.value += 5% of new.dlen
+        """
+        h_st_old, v_st_old = self.get_both_bar_stats()
+        logging.debug(f"old   m={multiplier} h={h_st_old}")
+
+        self.set_zoom(self.zoom_widget.value() * (1 + multiplier))
+
+        h_st_zoom, v_st_zoom = self.get_both_bar_stats()
+        #logging.debug(f"zoom  m={multiplier} h={h_st_zoom}")
+
+        # bar shrink factor is 1/2 of multiplier
+        #       h_st_zoom.center = h_st_old.center
+        # =>    h_st_zoom.value  + 0.5 * h_st_zoom.value
+        # =>    (h_st_zoom.value + 0.5 * h_st_zoom.pstep) / h_st_zoom.dlen = h_st_old.center
+        # =>    h_st_zoom.value + 0.5 * h_st_zoom.pstep = h_st_zoom.dlen * h_st_old.center
+        # =>    h_st_zoom.value = h_st_zoom.dlen * h_st_old.center -  0.5 * h_st_zoom.pstep 
+        factor = 1 + 0.5 * multiplier   
+
+        h_bar = self.scroll_bars[Qt.Horizontal]
+        h_st_zoom.value = h_st_zoom.dlen * h_st_old.center -  0.5 * h_st_zoom.pstep 
+        logging.debug(f"zoom {h_st_zoom.dlen=} * {h_st_old.center=} - 0.5 * {h_st_zoom.pstep=} = {h_st_zoom.value=}")
+        if h_st_zoom.value > h_st_zoom.max:
+            logging.debug(f"zoom  {h_st_zoom.value=} > {h_st_zoom.max=}")
+        if h_st_zoom.value < h_st_zoom.min:
+            logging.debug(f"zoom  {h_st_zoom.value=} < {h_st_zoom.min=}")
+        h_bar.setValue(h_st_zoom.value)
+
+        v_bar = self.scroll_bars[Qt.Vertical]
+        v_st_shift_value =  v_st_zoom.dlen * v_st_old.center - 0.5 * v_st_zoom.pstep
+        v_bar.setValue(v_st_shift_value)
+
+        h_st_shift, v_st_shift = self.get_both_bar_stats()
+        logging.debug(f"shift m={multiplier} h={h_st_shift}")
+
 
     def zoom_to_selection(self):
         self.zoom_mode = self.ZoomMode.ZOOM_TO_AREA
@@ -1615,14 +1694,29 @@ table thead th {
         h_bar.setValue(zoom_h.value)
         v_bar.setValue(zoom_v.value)
 
+    def get_both_bar_stats(self):
+        h_stats = self.record_bar_stats(self.scroll_bars[Qt.Horizontal])
+        v_stats = self.record_bar_stats(self.scroll_bars[Qt.Vertical])
+        return h_stats, v_stats
+
+
+
     def record_bar_stats(self, bar):
-        stats = BarStats();
-        stats.min   = bar.minimum()
-        stats.max   = bar.maximum()
-        stats.value = bar.value()
-        stats.pstep = bar.pageStep()
-        stats.dlen  = stats.max - stats.min + stats.pstep
-        logging.debug(f"min={stats.min} max={stats.max} v={stats.value} p={stats.pstep} d={stats.dlen}")
+        stats = SimpleNamespace();
+        orient  = bar.orientation()
+        if orient == Qt.Horizontal:
+            stats.orient = "H"
+        else:
+            stats.orient = "V"
+
+        stats.min    = bar.minimum()
+        stats.max    = bar.maximum()
+        stats.value  = bar.value()
+        stats.pstep  = bar.pageStep()
+        stats.dlen   = stats.max - stats.min + stats.pstep
+        stats.center = (stats.value + 0.5 * stats.pstep) / stats.dlen
+        #logging.debug(f"bar={bar} min={stats.min} max={stats.max} v={stats.value} p={stats.pstep} d={stats.dlen}")
+        #logging.debug(f"stats={stats}")
         return stats
 
 
@@ -1893,7 +1987,7 @@ table thead th {
         settings[SETTING_RECENT_FILES] = self.recent_files
         settings[SETTING_ADVANCE_MODE] = not self._beginner
         if self.default_save_dir and os.path.exists(self.default_save_dir):
-            settings[SETTING_SAVE_DIR] = ustr(self.default_save_dir)
+            settings[SETTING_SAVE_DIR] = self.default_save_dir
         else:
             settings[SETTING_SAVE_DIR] = ''
 
@@ -1922,20 +2016,20 @@ table thead th {
             for file in files:
                 if file.lower().endswith(tuple(extensions)):
                     relative_path = os.path.join(root, file)
-                    path = ustr(os.path.abspath(relative_path))
+                    path = os.path.abspath(relative_path)
                     images.append(path)
         natural_sort(images, key=lambda x: x.lower())
         return images
 
     def change_save_dir_dialog(self, _value=False):
         if self.default_save_dir is not None:
-            path = ustr(self.default_save_dir)
+            path = self.default_save_dir
         else:
             path = '.'
 
-        dir_path = ustr(QFileDialog.getExistingDirectory(self,
+        dir_path = QFileDialog.getExistingDirectory(self,
                                                          '%s - Save annotations to the directory' % __appname__, path,  QFileDialog.ShowDirsOnly
-                                                         | QFileDialog.DontResolveSymlinks))
+                                                         | QFileDialog.DontResolveSymlinks)
 
         if dir_path is not None and len(dir_path) > 1:
             self.default_save_dir = dir_path
@@ -1950,11 +2044,11 @@ table thead th {
             self.statusBar().show()
             return
 
-        path = os.path.dirname(ustr(self.image_path))\
+        path = os.path.dirname(self.image_path)\
             if self.image_path else '.'
         if self.label_file_format == LabelFileFormat.PASCAL_VOC:
             filters = "Open Annotation XML file (%s)" % ' '.join(['*.xml'])
-            filename = ustr(QFileDialog.getOpenFileName(self, '%s - Choose a xml file' % __appname__, path, filters))
+            filename = QFileDialog.getOpenFileName(self, '%s - Choose a xml file' % __appname__, path, filters)
             if filename:
                 if isinstance(filename, (tuple, list)):
                     filename = filename[0]
@@ -1970,11 +2064,11 @@ table thead th {
         else:
             default_open_dir_path = os.path.dirname(self.image_path) if self.image_path else '.'
         if silent != True:
-            target_dir_path = ustr(QFileDialog.getExistingDirectory(self,
+            target_dir_path = QFileDialog.getExistingDirectory(self,
                                                                     '%s - Open Directory' % __appname__, default_open_dir_path,
-                                                                    QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+                                                                    QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks)
         else:
-            target_dir_path = ustr(default_open_dir_path)
+            target_dir_path = default_open_dir_path
         self.last_open_dir = target_dir_path
         self.import_dir_images(target_dir_path)
 
@@ -2111,7 +2205,7 @@ table thead th {
     def open_file(self, _value=False):
         if not self.may_continue():
             return
-        path = os.path.dirname(ustr(self.image_path)) if self.image_path else '.'
+        path = os.path.dirname(self.image_path) if self.image_path else '.'
         formats = ['*.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
         filters = "Image & Label files (%s)" % ' '.join(formats + ['*%s' % LabelFile.suffix])
         filename = QFileDialog.getOpenFileName(self, '%s - Choose Image or Label file' % __appname__, path, filters)
@@ -2123,11 +2217,11 @@ table thead th {
             self.load_file(filename)
 
     def save_file(self, _value=False):
-        if self.default_save_dir is not None and len(ustr(self.default_save_dir)):
+        if self.default_save_dir is not None and len(self.default_save_dir):
             if self.image_path:
                 image_file_name = os.path.basename(self.image_path)
                 saved_file_name = os.path.splitext(image_file_name)[0]
-                saved_path = os.path.join(ustr(self.default_save_dir), saved_file_name)
+                saved_path = os.path.join(self.default_save_dir, saved_file_name)
                 self._save_file(saved_path)
         else:
             image_file_dir = os.path.dirname(self.image_path)
@@ -2151,18 +2245,19 @@ table thead th {
         filename_without_extension = os.path.splitext(self.image_path)[0]
         dlg.selectFile(filename_without_extension)
         dlg.setOption(QFileDialog.DontUseNativeDialog, False)
-        if dlg.exec_():
-            full_image_path = ustr(dlg.selectedFiles()[0])
+        if dlg.exec():
+            full_file_path = dlg.selectedFiles()[0]
             if remove_ext:
-                return os.path.splitext(full_image_path)[0]  # Return file path without the extension.
+                return os.path.splitext(full_file_path)[0]  # Return file path without the extension.
             else:
-                return full_image_path
+                return full_file_path
         return ''
 
-    def _save_file(self, annotation_path):
-        if annotation_path and self.save_labels(annotation_path):
+    def _save_file(self, annotation_file_path):
+        if annotation_file_path and self.save_labels(annotation_file_path):
             self.set_clean()
-            self.statusBar().showMessage('Saved to  %s' % annotation_path)
+            self.statusBar().showMessage('Saved to  %s' % annotation_file_path)
+            self.update_items_in_file_list_widget()
             self.statusBar().show()
 
     def close_file(self, _value=False):
@@ -2188,8 +2283,8 @@ table thead th {
     def reset_all(self):
         self.settings.reset()
         self.close()
-        process = QProcess()
-        process.startDetached(os.path.abspath(__file__))
+        #process = QProcess()
+        #process.startDetached(os.path.abspath(__file__))
 
     def reset_quit(self):
         self.settings.reset()
@@ -2325,8 +2420,7 @@ table thead th {
             self.save_file()
 
     def toggle_paint_labels_option(self):
-        for shape in self.canvas.shapes:
-            shape.paint_label = self.display_label_option.isChecked()
+        Shape.paint_label = self.display_label_option.isChecked()
 
     def toggle_paint_notes_option(self):
         Shape.paint_note  = self.display_note_option.isChecked()
