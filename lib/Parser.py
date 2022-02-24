@@ -124,6 +124,11 @@ class Parser:
             logging.info(f" {basename}: replaced dash so {text} -> {out}")
             text = out
 
+        if ' ' in text:
+            out = text.replace(' ','_')
+            logging.info(f" {basename}: replaced space so {text} -> {out}")
+            text = out
+
         if '_meristem' in text:
             out = text.replace('_meristem','_stem')
             #logging.info(f" {basename}: replaced meristem so {text} -> {out}")
@@ -135,7 +140,7 @@ class Parser:
             text = out
 
         if text not in plantData.planttype_names:
-            logging.warning(f" {basename}: label {text} not in standard label types: {PLANT_TYPE_NAMES}")
+            logging.warning(f" {basename}: label {text} not in standard label types: {plantData.planttype_names}")
 
         return text
 

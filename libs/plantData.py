@@ -88,7 +88,7 @@ class PlantData:
 
     def has_valid_suffix(self, text):
         matches = self.type_names
-        if any(x in text for x in matches):
+        if any('_' + x in text for x in matches):
             return True
         else:
             return False
