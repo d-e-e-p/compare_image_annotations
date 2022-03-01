@@ -5,7 +5,6 @@ from PySide6.QtWidgets import *
 
 BB = QDialogButtonBox
 
-from libs.utils import new_icon, label_validator, trimmed
 
 import logging
 
