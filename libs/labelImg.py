@@ -267,7 +267,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.colorBackgroundSlider.valueChanged.connect(self.adjust_background_changed)
         list_layout.addWidget(self.colorBackgroundSlider)
 
-        foregroundLabel = QLabel("Annotation Darkness")
+        foregroundLabel = QLabel("Annotation Saturation")
         foregroundLabel.setAlignment(Qt.AlignCenter)
         list_layout.addWidget(foregroundLabel)
 
@@ -1172,27 +1172,26 @@ table thead th {
 
         return cname, cplant, ctype, cplantType
 
-    def simulate_file_item_double_clicked(self, filename):
-        if filename:
-            image = self.path_to_image_basename[filename]
-            if image:
-                items = self.file_list_widget.findItems(image,Qt.MatchExactly)
-                for item in items:
-                    item.setSelected(True)
-                    self.file_list_widget.setCurrentItem(item)
-                    self.file_item_double_clicked(item)
+    def simulate_file_item_double_clicked(self):
+        if self.file_list_widget.count() > 0:
+            file_widget_item = self.file_list_widget.item(self.cur_img_idx)
+            logging.debug(f"{self.cur_img_idx=} {file_widget_item=}")
+            self.file_list_widget.setCurrentItem(file_widget_item)
+            self.file_item_double_clicked(file_widget_item)
+        else:
+            logging.debug(f"nothing in file list widget")
 
     # Tzutalin 20160906 : Add file list and dock to move faster
     def file_item_double_clicked(self, item=None):
         imgName = item.text()
         imgPath = self.image_basename_to_path[imgName]
-        logging.debug(f"loading image {self.cur_img_idx} :  {imgName} from {imgPath}")
         # TODO: remove index scheme of tracking files
-        self.cur_img_idx = self.m_img_list.index(ustr(imgPath))
+        self.cur_img_idx = self.m_img_list.index(imgPath)
+        self.image_path = imgPath
+        logging.debug(f"loading image {self.cur_img_idx} : {imgName} from {imgPath}")
         filename = self.m_img_list[self.cur_img_idx]
         logging.debug(f"loading filename = {filename}")
-        if filename:
-            self.load_file(filename)
+        self.load_current_image()
 
     # Add chris
     def button_state(self, item=None):
@@ -1798,37 +1797,34 @@ table thead th {
         for item, shape in self.items_to_shapes.items():
             item.setCheckState(Qt.Checked if value else Qt.Unchecked)
 
-    def load_file(self, image_path=None):
-        self.image_path = image_path
-        self.load_image_file(image_path)
-        self.update_image_overlay(image_path)
+    def load_current_image(self):
+        logging.warning(f"loading {self.image_path=}")
+        self.load_image_file()
+        self.update_image_overlay()
 
 
-
-    def load_image_file(self, image_path):
+    def load_image_file(self):
         """Load the specified file, or the last opened file if None."""
         all_stack_frames = inspect.stack()
         caller_stack_frame = all_stack_frames[1]
         caller_name = caller_stack_frame[3]
-        self.reset_state()
+        #self.reset_state()
         self.canvas.setEnabled(False)
-        if image_path is None:
-            image_path = self.settings.get(SETTING_FILENAME)
+        #if self.image_path is None:
+        #    self.image_path = self.settings.get(SETTING_FILENAME)
 
-        logging.warning(f"load {image_path=} {caller_name=}---------------------------")
+        logging.warning(f"load {self.image_path=} {caller_name=}---------------------------")
         #abs_image_path = os.path.abspath(image_path)
-        abs_image_path = image_path
-        if abs_image_path and self.file_list_widget.count() > 0:
-            logging.debug(f" testing for {abs_image_path} in {self.m_img_list}")
-            if abs_image_path in self.m_img_list:
-                index = self.m_img_list.index(abs_image_path)
-                file_widget_item = self.file_list_widget.item(index)
-                file_widget_item.setSelected(True)
-                self.file_list_widget.setCurrentItem(file_widget_item)
-            else:
-                logging.debug(f"clearing...why?")
-                self.file_list_widget.clear()
-                self.m_img_list.clear()
+        abs_image_path = self.image_path
+        if abs_image_path in self.m_img_list:
+            index = self.m_img_list.index(abs_image_path)
+            file_widget_item = self.file_list_widget.item(index)
+            file_widget_item.setSelected(True)
+            self.file_list_widget.setCurrentItem(file_widget_item)
+        else:
+            logging.warning(f"clearing...why?")
+            self.file_list_widget.clear()
+            self.m_img_list.clear()
 
         if abs_image_path and os.path.exists(abs_image_path):
             # Load image:
@@ -1860,10 +1856,10 @@ table thead th {
             self.ref_user_box.clear()
             self.ref_user_box.addItems(self.active_users)
             self.ref_user_box.blockSignals(False)
-            self.show_class_list_for_image_file(image_path)
+            self.show_class_list_for_image_file()
 
 
-    def update_image_overlay(self, image_path):
+    def update_image_overlay(self):
 
         # place self.image on using painter on new version with gutters
         #new_width = self.image.width() + self.bbl.pl.margin_x
@@ -1895,7 +1891,7 @@ table thead th {
         #logging.warning(f"ref_user list = {AllItems}")
 
         counter = self.counter_str()
-        self.setWindowTitle(__appname__ + ' ' + image_path + ' ' + counter)
+        self.setWindowTitle(__appname__ + ' ' + self.image_path + ' ' + counter)
 
         # Default : select last item if there is at least one item
         if self.label_list.count():
@@ -2102,18 +2098,23 @@ table thead th {
             self.path_to_image_basename[imgPath] = imgName
         logging.debug(f"self.image_basename_to_path = {self.image_basename_to_path}")
 
-        self.m_img_list = list(self.image_basename_to_path.values())
-        self.img_count = len(self.m_img_list)
-        logging.debug(f"self.m_img_list = {self.m_img_list}")
-        self.open_next_image()
-        for imgPath in self.m_img_list:
-            imgName = self.path_to_image_basename[imgPath]
+        # sort the basenames
+        basenames = list(self.image_basename_to_path.keys())
+        natural_sort(basenames)
+        logging.debug(f"sorted {basenames=}")
+        self.m_img_list = []
+        for imgName in basenames:
             item = QListWidgetItem(imgName)
             self.file_list_widget.addItem(item)
+            self.m_img_list.append(self.image_basename_to_path[imgName])
+        self.img_count = len(self.m_img_list)
 
         self.image_path = self.m_img_list[0]
         self.add_recent_file(self.image_path)
         logging.debug(f"{self.image_path=} {self.recent_files=}")
+        self.load_current_image()
+        self.load_current_image()
+        
 
 
     def import_dir_images(self, dir_path):
@@ -2123,6 +2124,7 @@ table thead th {
         self.last_open_dir = dir_path
         self.dir_name = dir_path
         self.image_path = None
+        logging.debug(f"{self.image_path=}")
         self.file_list_widget.clear()
 
         files_in_dir = self.scan_all_images(dir_path)
@@ -2133,9 +2135,9 @@ table thead th {
                 self.path_to_image_basename[imgPath] = imgName
         logging.debug(f"{self.image_basename_to_path=}")
 
-        self.m_img_list = list(self.image_basename_to_path.values())
+        self.m_img_list = sorted(list(self.image_basename_to_path.values()))
         self.img_count = len(self.m_img_list)
-        logging.debug(f"{self.m_img_list=}")
+        logging.debug(f"{self.m_img_list=} {self.image_path=}")
         self.open_next_image()
         for imgPath in self.m_img_list:
             imgName = self.path_to_image_basename[imgPath]
@@ -2182,13 +2184,17 @@ table thead th {
 
         if self.cur_img_idx - 1 >= 0:
             self.cur_img_idx -= 1
-            filename = self.m_img_list[self.cur_img_idx]
-            if filename:
-                self.load_file(filename)
+        self.simulate_file_item_double_clicked()
 
     def open_next_image(self, _value=False):
         # Proceeding next image without dialog if having any label
-        logging.debug(f"open next image {_value=} {self.dirty=} {self.may_continue=} {self.img_count=}")
+        all_stack_frames = inspect.stack()
+        caller_stack_frame = all_stack_frames[1]
+        caller_name = caller_stack_frame[3]
+        logging.debug(f"{caller_name=}---------------------------")
+        logging.debug(f"{all_stack_frames=}---------------------------")
+        logging.debug(f"open next image {_value=} {self.dirty=} cont={self.may_continue()} {self.img_count=} {self.image_path=}")
+        logging.debug(f"{self.cur_img_idx=}")
         if self.auto_saving.isChecked():
             if self.default_save_dir is not None:
                 if self.dirty is True:
@@ -2198,22 +2204,24 @@ table thead th {
                 return
 
         if not self.may_continue():
+            logging.debug("return because may_continue")
             return
 
         if self.img_count <= 0:
+            logging.debug("return {self.img_count=} < 0")
             return
 
         filename = None
         if self.image_path is None:
+            logging.debug(f"{self.image_path=} so setting index to 0")
             filename = self.m_img_list[0]
             self.cur_img_idx = 0
         else:
             if self.cur_img_idx + 1 < self.img_count:
                 self.cur_img_idx += 1
                 filename = self.m_img_list[self.cur_img_idx]
-        logging.debug(f"{filename=} {self.cur_img_idx=} {self.m_img_list=}")
-
-        self.simulate_file_item_double_clicked(filename)
+        logging.debug(f"{filename=} {self.cur_img_idx=} ")
+        self.simulate_file_item_double_clicked()
 
     def open_file(self, _value=False):
         if not self.may_continue():
@@ -2453,11 +2461,11 @@ table thead th {
         self.ref_user_box.setCurrentText(self.ref_user)
         self.ref_user_box.blockSignals(False)
 
-    def show_class_list_for_image_file(self, imgPath):
+    def show_class_list_for_image_file(self):
         """
         retrieve classes that match an image
         """
-        imgName = Path(imgPath).stem
+        imgName = Path(self.image_path).stem
         self.current_image = imgName
         class_list = self.bbl.stats.image_to_class_map[imgName]
         logging.debug(f"class list for {imgName} is {class_list}")
