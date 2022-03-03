@@ -16,6 +16,7 @@ from glob import glob
 import filecmp
 import logging
 import psutil
+from colorama import Fore, Back, Style
 
 from libs.constants import DEFAULT_ENCODING
 from libs.build_stamp import *
@@ -23,8 +24,7 @@ from libs.build_stamp import *
 XML_EXT = '.xml'
 ENCODE_METHOD = DEFAULT_ENCODING
 
-from lib.Bbox   import Bbox
-from lib.Bbox   import BboxList
+from lib.Bbox       import Bbox
 from libs.plantData import plantData
 
 class Parser:
@@ -32,14 +32,43 @@ class Parser:
         xml_ext = ".xml"
         jpg_ext = ".jpg"
         self.bbl = bbl
+        self.args = args
 
-        stem2xmls = self.get_files_with_mutiple_versions(args.data, xml_ext, args.prune)
-        stem2jpgs = self.get_files_with_mutiple_versions(args.data, jpg_ext, False     )
+        self.bbl.stem2xmls = self.get_files_with_mutiple_versions(args.data, xml_ext, args.prune)
+        self.bbl.stem2jpgs = self.get_files_with_mutiple_versions(args.data, jpg_ext, False     )
 
-        self.parse_xml_dirs(stem2xmls, args.check)
-        self.bbl.update_stats()
+        self.ignore_jpg_with_no_associated_xml();
 
-        self.parse_jpg_dirs(stem2jpgs)
+        #self.parse_xml_dirs(stem2xmls, args.check)
+        self.bbl.update_run_stats()
+        self.parse_jpg_dirs()
+
+    def ignore_jpg_with_no_associated_xml(self):
+
+        valid_images = list(self.bbl.stem2xmls.keys())
+
+        remove_keys = []
+        for image in self.bbl.stem2jpgs.keys():
+            if not image in valid_images:
+                remove_keys.append(image)
+        logging.debug(f"removing keys {remove_keys=}")
+        for key in remove_keys:
+            self.bbl.stem2jpgs.pop(key)
+
+
+
+    def parse_xml_associated_with_image(self, image):
+        """
+        only parse specific 
+        """
+        #logging.debug(f"for {image=} s2x= {self.bbl.stem2xmls[image]}")
+        col_box = Style.BRIGHT + Fore.BLUE + Back.WHITE
+        col_reset = Style.RESET_ALL
+        for file in self.bbl.stem2xmls[image]:
+            print(f"     -> loading: {file} : found ", end='')
+            bbox_list = self.parse_xml_file(image, file, self.args.check)
+            self.bbl.bbox_obj_list[image].extend(bbox_list)
+            print(f" {col_box} {len(bbox_list)} {col_reset} boxes")
 
 
     def get_files_with_mutiple_versions(self, root_dir, ext, prune):
@@ -55,7 +84,7 @@ class Parser:
                         filename = os.path.join(dir, file)
                         stem = Path(filename).stem
                         stem2files[stem].append(filename)
-        logging.debug(f"{stem2files}")
+        logging.debug(f"for {ext=} {stem2files=}")
 
         # remove entries with only 1 xml
         if prune:
@@ -92,13 +121,13 @@ class Parser:
                 self.bbl.bbox_obj_list.extend(bbox_list)
                 print(f" ({len(bbox_list)} boxes)")
 
-    def parse_jpg_dirs(self, stem2jpgs):
+    def parse_jpg_dirs(self):
         """
         get the object in each jpg file under jpg_path
         """
         err_exit = False
         image_list = self.bbl.stats.image_list
-        for stem, files in stem2jpgs.items():
+        for stem, files in self.bbl.stem2jpgs.items():
             if stem in image_list:
                 self.bbl.stem2jpgs[stem] = files[0]
                 if len(files) > 1:

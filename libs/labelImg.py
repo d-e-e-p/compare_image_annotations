@@ -10,6 +10,7 @@ import subprocess
 import shutil
 import webbrowser as wb
 import logging
+import inspect
 from enum import Enum
 import argparse
 from pathlib import Path
@@ -30,9 +31,7 @@ from collections import Counter
 from functools import partial
 from collections import defaultdict
 
-from lib.Bbox    import Bbox
-from lib.Bbox    import BboxList
-from lib.Plotter import Plotter, DrawObject
+from lib.Plotter import DrawObject
 from lib.ColorPalette import ColorPalette
 
 from PySide6.QtGui import QTextLine, QAction, QImage, QColor, QCursor, QPixmap, QImageReader, QFont, QPainter
@@ -101,7 +100,7 @@ class MainWindow(QMainWindow, WindowMixin):
         ZOOM_TO_AREA = "zoom_to_area"
 
     # TODO: split up _init into pieces..
-    def __init__(self, bbl, pl,  default_filename=None, default_save_dir=None):
+    def __init__(self, bbl, default_filename=None, default_save_dir=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
 
@@ -116,7 +115,6 @@ class MainWindow(QMainWindow, WindowMixin):
         self.username = get_username()
 
         self.bbl = bbl
-        self.pl  = pl
         self.ref_user = None
         self.current_image = None
         self.current_draw_object = None
@@ -137,7 +135,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.last_open_dir = None
         self.cur_img_idx = 0
         self.img_count = len(self.m_img_list)
-        self.color_theme = self.pl.color_theme
+        self.color_theme = self.bbl.pl.color_theme
         self.adjust_foreground =  5     # brightness
         self.adjust_background = 10     # transparency
         self.filestats = None
@@ -213,7 +211,8 @@ class MainWindow(QMainWindow, WindowMixin):
             # self.cb.setStyleSheet("color: black")
             # self.cb.setAttribute(QtCore.Qt.WA_AlwaysShowToolTips)
             # self.cb.setToolTip ('my checkBox')
-            self.user_button[user].stateChanged.connect(self.draw_iou_boxes)
+            #self.user_button[user].stateChanged.connect(self.draw_iou_boxes)
+            self.user_button[user].clicked.connect(self.draw_iou_boxes)
             list_layout.addWidget(self.user_button[user])
 
         #import pdb; pdb.set_trace()
@@ -255,8 +254,9 @@ class MainWindow(QMainWindow, WindowMixin):
         self.colorBox.currentIndexChanged.connect(self.color_theme_changed)
         list_layout.addWidget(self.colorBox)
 
+        # TODO: change from background to annotation
         # slider for background and foreground
-        backgroundLabel = QLabel("Background Opacity")
+        backgroundLabel = QLabel("Annotation Opacity")
         backgroundLabel.setAlignment(Qt.AlignCenter)
         list_layout.addWidget(backgroundLabel)
 
@@ -1172,6 +1172,16 @@ table thead th {
 
         return cname, cplant, ctype, cplantType
 
+    def simulate_file_item_double_clicked(self, filename):
+        if filename:
+            image = self.path_to_image_basename[filename]
+            if image:
+                items = self.file_list_widget.findItems(image,Qt.MatchExactly)
+                for item in items:
+                    item.setSelected(True)
+                    self.file_list_widget.setCurrentItem(item)
+                    self.file_item_double_clicked(item)
+
     # Tzutalin 20160906 : Add file list and dock to move faster
     def file_item_double_clicked(self, item=None):
         imgName = item.text()
@@ -1789,12 +1799,23 @@ table thead th {
             item.setCheckState(Qt.Checked if value else Qt.Unchecked)
 
     def load_file(self, image_path=None):
+        self.image_path = image_path
+        self.load_image_file(image_path)
+        self.update_image_overlay(image_path)
+
+
+
+    def load_image_file(self, image_path):
         """Load the specified file, or the last opened file if None."""
+        all_stack_frames = inspect.stack()
+        caller_stack_frame = all_stack_frames[1]
+        caller_name = caller_stack_frame[3]
         self.reset_state()
         self.canvas.setEnabled(False)
         if image_path is None:
             image_path = self.settings.get(SETTING_FILENAME)
 
+        logging.warning(f"load {image_path=} {caller_name=}---------------------------")
         #abs_image_path = os.path.abspath(image_path)
         abs_image_path = image_path
         if abs_image_path and self.file_list_widget.count() > 0:
@@ -1810,26 +1831,15 @@ table thead th {
                 self.m_img_list.clear()
 
         if abs_image_path and os.path.exists(abs_image_path):
-            if LabelFile.is_label_file(abs_image_path):
-                try:
-                    self.label_file = LabelFile(abs_image_path)
-                except LabelFileError as e:
-                    self.error_message(u'Error opening file',
-                                       (u"<p><b>%s</b></p>"
-                                        u"<p>Make sure <i>%s</i> is a valid label file.")
-                                       % (e, abs_image_path))
-                    self.status("Error reading %s" % abs_image_path)
-                    return False
-                self.image_data = self.label_file.image_data
-                self.line_color = QColor(*self.label_file.lineColor)
-                self.fill_color = QColor(*self.label_file.fillColor)
-                self.canvas.verified = self.label_file.verified
-            else:
-                # Load image:
-                # read data first and store for saving into label file.
-                self.image_data = read(abs_image_path, None)
-                self.label_file = None
-                self.canvas.verified = False
+            # Load image:
+            # read data first and store for saving into label file.
+            self.image_data = read(abs_image_path, None)
+            self.label_file = None
+            self.canvas.verified = False
+
+            imgName = Path(abs_image_path).stem
+            self.current_image = imgName
+            self.bbl.load_xml_for_image(self.current_image)
 
             if isinstance(self.image_data, QImage):
                 image = self.image_data
@@ -1840,68 +1850,69 @@ table thead th {
                                    u"<p>Make sure <i>%s</i> is a valid image file." % abs_file_path)
                 self.status("Error reading %s" % abs_file_path)
                 return False
-                return False
+
+            self.image = image
             self.status("Loaded %s" % os.path.basename(abs_image_path))
             logging.info(f"Loaded {os.path.basename(abs_image_path)}")
-
-
-            # place self.image on using painter on new version with gutters
-            self.image = image
-            new_width = self.image.width() + self.pl.margin_x
-            new_height = self.image.height() + self.pl.margin_y
-            image2 = image.scaled(new_width, new_height)
-            p= QPainter()
-            p.begin(image2)
-            p.drawImage(0, 0, image)
-            p.end()
-            logging.debug(f"loaded image2")
-
-            # convert painter to qimage and set it to canvas
-            qimage = QImage(image2)
-            self.canvas.load_pixmap(QPixmap.fromImage(image2))
-            self.image = image2
-
-
-            self.image_path = abs_image_path
-            #self.canvas.load_pixmap(QPixmap.fromImage(image))
-            if self.label_file:
-                self.load_labels(self.label_file.shapes)
-            self.set_clean()
-            self.canvas.setEnabled(True)
-            self.adjust_scale(initial=True)
-            self.paint_canvas()
-            self.add_recent_file(self.image_path)
-            self.toggle_actions(True)
-            self.show_bounding_box_from_annotation_file(image_path)
-            imgName = Path(self.image_path).stem
+            # ok, now that file is loaded, update combo box
             self.active_users = self.bbl.stats.image_to_active_users_map[imgName]
+            self.ref_user_box.blockSignals(True)
             self.ref_user_box.clear()
             self.ref_user_box.addItems(self.active_users)
-            #AllItems = [self.ref_user_box.itemText(i) for i in range(self.ref_user_box.count())]
-            #logging.warning(f"ref_user list = {AllItems}")
-
-            # ok, now that file is loaded, update combo box
+            self.ref_user_box.blockSignals(False)
             self.show_class_list_for_image_file(image_path)
 
-            counter = self.counter_str()
-            self.setWindowTitle(__appname__ + ' ' + image_path + ' ' + counter)
 
-            # Default : select last item if there is at least one item
-            if self.label_list.count():
-                self.label_list.setCurrentItem(self.label_list.item(self.label_list.count() - 1))
-                self.label_list.item(self.label_list.count() - 1).setSelected(True)
-            # get active users and enable them
-            for user in self.bbl.stats.user_list:
-                if user in self.active_users:
-                   self.user_button[user].setEnabled(True)
-                else:
-                   self.user_button[user].setEnabled(False)
+    def update_image_overlay(self, image_path):
+
+        # place self.image on using painter on new version with gutters
+        #new_width = self.image.width() + self.bbl.pl.margin_x
+        #new_height = self.image.height() + self.bbl.pl.margin_y
+        #image2 = image.scaled(new_width, new_height)
+        #p= QPainter()
+        #p.begin(image2)
+        #p.drawImage(0, 0, image)
+        #p.end()
+        #logging.debug(f"loaded image2")
+
+        # convert painter to qimage and set it to canvas
+        #qimage = QImage(image2)
+        #self.canvas.load_pixmap(QPixmap.fromImage(image2))
+        #self.image = image2
+        self.canvas.load_pixmap(QPixmap.fromImage(self.image))
+
+        #self.canvas.load_pixmap(QPixmap.fromImage(image))
+        if self.label_file:
+            self.load_labels(self.label_file.shapes)
+        self.set_clean()
+        self.canvas.setEnabled(True)
+        self.adjust_scale(initial=True)
+        self.paint_canvas()
+        self.add_recent_file(self.image_path)
+        self.toggle_actions(True)
+        #self.show_bounding_box_from_annotation_file(image_path)
+        #AllItems = [self.ref_user_box.itemText(i) for i in range(self.ref_user_box.count())]
+        #logging.warning(f"ref_user list = {AllItems}")
+
+        counter = self.counter_str()
+        self.setWindowTitle(__appname__ + ' ' + image_path + ' ' + counter)
+
+        # Default : select last item if there is at least one item
+        if self.label_list.count():
+            self.label_list.setCurrentItem(self.label_list.item(self.label_list.count() - 1))
+            self.label_list.item(self.label_list.count() - 1).setSelected(True)
+        # get active users and enable them
+        for user in self.bbl.stats.user_list:
+            if user in self.active_users:
+               self.user_button[user].setEnabled(True)
+            else:
+               self.user_button[user].setEnabled(False)
 
 
-            self.canvas.setFocus()
-            self.draw_iou_boxes()
-            return True
-        return False
+        self.canvas.setFocus()
+        logging.warning(f"about to call draw")
+        self.draw_iou_boxes()
+        return True
 
     def counter_str(self):
         """
@@ -1959,8 +1970,11 @@ table thead th {
         h1 = self.centralWidget().height() - e
         a1 = w1 / h1
         # Calculate a new scale value based on the pixmap's aspect ratio.
-        w2 = self.canvas.pixmap.width() - 0.0
-        h2 = self.canvas.pixmap.height() + extra_height - 0.0
+        #w2 = self.canvas.pixmap.width() - 0.0
+        #h2 = self.canvas.pixmap.height() + extra_height - 0.0
+        #a2 = w2 / h2
+        w2 = self.canvas.overlay.width() - 0.0
+        h2 = self.canvas.overlay.height() + extra_height - 0.0
         a2 = w2 / h2
         return w1 / w2 if a2 >= a1 else h1 / h2
 
@@ -2082,10 +2096,10 @@ table thead th {
 
         self.file_list_widget.clear()
 
+        logging.debug(f" {self.bbl.stem2jpgs=}")
         for imgName, imgPath in self.bbl.stem2jpgs.items():
-            if self.bbl.stats.image_to_class_map[imgName]:
-                self.image_basename_to_path[imgName] = imgPath
-                self.path_to_image_basename[imgPath] = imgName
+            self.image_basename_to_path[imgName] = imgPath
+            self.path_to_image_basename[imgPath] = imgName
         logging.debug(f"self.image_basename_to_path = {self.image_basename_to_path}")
 
         self.m_img_list = list(self.image_basename_to_path.values())
@@ -2099,7 +2113,7 @@ table thead th {
 
         self.image_path = self.m_img_list[0]
         self.add_recent_file(self.image_path)
-        logging.debug(f"curr_image_path = {self.image_path} recent={self.recent_files}")
+        logging.debug(f"{self.image_path=} {self.recent_files=}")
 
 
     def import_dir_images(self, dir_path):
@@ -2117,11 +2131,11 @@ table thead th {
             if self.bbl.stats.image_to_class_map[imgName]:
                 self.image_basename_to_path[imgName] = imgPath
                 self.path_to_image_basename[imgPath] = imgName
-        logging.debug(f"self.image_basename_to_path = {self.image_basename_to_path}")
+        logging.debug(f"{self.image_basename_to_path=}")
 
         self.m_img_list = list(self.image_basename_to_path.values())
         self.img_count = len(self.m_img_list)
-        logging.debug(f"self.m_img_list = {self.m_img_list}")
+        logging.debug(f"{self.m_img_list=}")
         self.open_next_image()
         for imgPath in self.m_img_list:
             imgName = self.path_to_image_basename[imgPath]
@@ -2174,7 +2188,7 @@ table thead th {
 
     def open_next_image(self, _value=False):
         # Proceeding next image without dialog if having any label
-        #logging.debug(f"open next image {_value}")
+        logging.debug(f"open next image {_value=} {self.dirty=} {self.may_continue=} {self.img_count=}")
         if self.auto_saving.isChecked():
             if self.default_save_dir is not None:
                 if self.dirty is True:
@@ -2197,10 +2211,9 @@ table thead th {
             if self.cur_img_idx + 1 < self.img_count:
                 self.cur_img_idx += 1
                 filename = self.m_img_list[self.cur_img_idx]
-        #logging.debug(f"filename={filename} self.cur_img_idx={self.cur_img_idx} self.m_img_list={self.m_img_list}")
+        logging.debug(f"{filename=} {self.cur_img_idx=} {self.m_img_list=}")
 
-        if filename:
-            self.load_file(filename)
+        self.simulate_file_item_double_clicked(filename)
 
     def open_file(self, _value=False):
         if not self.may_continue():
@@ -2436,7 +2449,9 @@ table thead th {
         # update widget as well..assume order of user_list
         if not self.ref_user:
             return
+        self.ref_user_box.blockSignals(True)
         self.ref_user_box.setCurrentText(self.ref_user)
+        self.ref_user_box.blockSignals(False)
 
     def show_class_list_for_image_file(self, imgPath):
         """
@@ -2524,29 +2539,37 @@ table thead th {
         self.draw_iou_boxes()
             
     def draw_iou_boxes(self, force_draw=False):
-        logging.debug(f"draw -----------------------------------------")
+        all_stack_frames = inspect.stack()
+        caller_stack_frame = all_stack_frames[1]
+        caller_name = caller_stack_frame[3]
+        logging.debug(f"draw {caller_name=}---------------------------")
+        if not self.current_image:
+            logging.debug(f"draw: no image selected")
+            return
+
         if self.class_list_widget.selectedItems().__len__() == 0:
             logging.debug(f"draw: no class selected")
             return
 
-        if not self.current_image:
-            logging.debug(f"draw: no image selected")
-            return
 
         class_base = self.class_list_widget.selectedItems()[0].text()
         image = self.current_image
 
         visible_users = {}
         active_users = self.bbl.stats.image_to_active_users_map[image]
+        logging.debug(f"setting active users... to {active_users=}")
         for user in self.bbl.stats.user_list:
             if user in active_users:
                 visible_users[user] = self.user_button[user].isChecked()
             else:
                 visible_users[user] = False
+
+
         ref_user = str(self.ref_user_box.currentText())
         if ref_user not in active_users:
             logging.debug(f"ref user '{ref_user}' not in {active_users}.. before:{self.ref_user}")
             self.update_ref_user(image,class_base)
+
         else:
             self.ref_user = ref_user
 
@@ -2568,16 +2591,18 @@ table thead th {
             self.update_widgets_with_overlay_stats()
         else:
             logging.debug(f"draw: nothing to do : same settings {dobj}")
+        logging.debug(f"draw completed")
 
     def draw_overlay_on_canvas(self):
         if self.current_draw_object.image != self.current_image:
             logging.debug(f"mismatch background image")
             return
-        img_data = self.pl.fetch_overlay_image(self.current_draw_object)
+        img_data = self.bbl.pl.fetch_overlay_image(self.current_draw_object)
         qimg = QImage()
         qimg.loadFromData(img_data, format = 'PNG')
         pm = QPixmap.fromImage(qimg)
         self.canvas.load_overlay(pm, self.adjust_background)
+        logging.debug(f"draw_overlay_on_canvas completed")
 
 
     def update_widgets_with_overlay_stats(self):
@@ -2607,6 +2632,7 @@ def inverted(color):
 
 
 def read(filename, default=None):
+    logging.info(f"reading image = {filename}")
     reader = QImageReader(filename)
     reader.setAutoTransform(True)
     return reader.read()
@@ -2626,7 +2652,7 @@ def get_username():
     username = Path(username).name
     return username
 
-def run_main_gui(bbl, pl, args):
+def run_main_gui(bbl, args):
     """
     boilerplate Qt application code to bring up main window
     Do everything but app.exec_() -- so that we can test the application in one thread
@@ -2643,7 +2669,7 @@ def run_main_gui(bbl, pl, args):
     # Usage : labelImg.py image classFile saveDir
     logging.info(f" data dir:  {args.data}")
     logging.info(f" save dir:  {args.out}")
-    win = MainWindow(bbl, pl)
+    win = MainWindow(bbl)
     win.show()
     return app, win
 

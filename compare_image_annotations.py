@@ -19,10 +19,10 @@ from PySide6.QtWidgets import (QLineEdit, QPushButton, QApplication, QVBoxLayout
 
 sys.tracebacklimit = None
 
-from lib.Bbox    import Bbox 
-from lib.Bbox    import BboxList
-from lib.Parser  import Parser
-from lib.Plotter import Plotter
+from lib.Bbox     import Bbox 
+from lib.BboxList import BboxList
+from lib.Parser   import Parser
+from lib.Plotter  import Plotter
 from lib.constants import VERSION, BUILD_DATE, AUTHOR
 from lib.CustomFormatter import CustomFormatter
 
@@ -142,20 +142,20 @@ def main():
 
     col = Fore.BLACK + Back.CYAN
 
-    bbl = BboxList()
-    print(f"    0/5 {col} loading xml " + Style.RESET_ALL)
-    Parser(bbl, args)
-    print(f"    1/5 {col} associating outer with meristem " + Style.RESET_ALL)
-    bbl.associate_stem_with_outer()
-    print(f"    2/5 {col} computing IOU " + Style.RESET_ALL)
-    bbl.compute_iou_for_each_annotation()
-    print(f"    3/5 {col} finding potential mis-labels " + Style.RESET_ALL)
-    bbl.locate_potential_mislabel()
-    print(f"    4/5 {col} saving report plots " + Style.RESET_ALL)
-    pl = Plotter(bbl, args)
+    bbl = BboxList(args)
+    print(f"    0/5 {col} checking xml " + Style.RESET_ALL)
+    #bbl.check_xml_and_images();
+    #print(f"    1/5 {col} associating outer with meristem " + Style.RESET_ALL)
+    #bbl.associate_stem_with_outer()
+    #print(f"    2/5 {col} computing IOU " + Style.RESET_ALL)
+    #bbl.compute_iou_for_each_annotation()
+    #print(f"    3/5 {col} finding potential mis-labels " + Style.RESET_ALL)
+    #bbl.locate_potential_mislabel()
+    #print(f"    4/5 {col} saving report plots " + Style.RESET_ALL)
+    #pl = Plotter(bbl, args)
     print(f"    5/5 {col} loading gui " + Style.RESET_ALL)
 
-    app, _win = run_main_gui(bbl, pl, args)
+    app, _win = run_main_gui(bbl, args)
     return app.exec()
     print(f"    done " + Style.RESET_ALL)
 

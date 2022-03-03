@@ -16,7 +16,6 @@ import math
 from random import choice, randint
 
 from lib.Bbox   import Bbox, DeepDict
-from lib.Bbox   import BboxList
 from lib.ColorPalette import ColorPalette
 
 
@@ -69,11 +68,11 @@ class Plotter:
         self.user_to_color = {}
         self.source_img = defaultdict(lambda: None)
         self.img_list = bbl.get_image_list()
-        self.read_images()
-        self.add_margins()
+        #self.read_images()
+        #self.add_margins()
         self.assign_colors_to_users(self.bbl.stats.user_list)
         self.fnt = self.get_fonts();
-        self.plot_iou_boxes(bbl, args.out)
+        #self.plot_iou_boxes(bbl, args.out)
 
     # make sure all images exist in img_dir
     def read_images(self):
@@ -102,6 +101,11 @@ class Plotter:
 
         if err_exit:
             sys.exit(-1)
+
+
+    def add_margin_image(self, image_name):
+        self.source_img[image_name] = \
+                    self.add_margin(self.source_img[image_name],0,self.margin_x,self.margin_y,0,(1, 1, 1))
 
 
     def add_margins(self):
@@ -243,6 +247,14 @@ image = {image_name} class = {cls}
 
     def fetch_overlay_image(self, dset):
 
+        # load if not loaded
+        if not self.source_img[dset.image]:
+            file_name = self.bbl.stem2jpgs[dset.image]
+            ih = Image.open(file_name)
+            self.source_img[dset.image] = ih.copy()
+            ih.close()
+            self.add_margin_image(dset.image)
+
         # what's the size of thie image?
         width, height = self.source_img[dset.image].size
         imgobj = Image.new('RGBA', (width, height), (255, 0, 0, 0))
@@ -262,9 +274,8 @@ image = {image_name} class = {cls}
 
         # first filter based on matching image/class
         filter_criteria = {}
-        filter_criteria['image']      = dset.image
         filter_criteria['class_base'] = dset.class_base
-        obj_list = self.bbl.filter(self.bbl.bbox_obj_list, **filter_criteria)
+        obj_list = self.bbl.filter(self.bbl.bbox_obj_list[dset.image], **filter_criteria)
 
         # now visible users only
         obj_list = self.bbl.filter_visible_users(obj_list, dset.visible_users)
@@ -304,7 +315,7 @@ image = {image_name} class = {cls}
         obj_list_f = self.bbl.filter(obj_list, 
                 user = dset.ref_user, 
                 class_type='outer')
-        logging.info(f" after filter: {obj_list_f}")
+        #logging.info(f" after filter: {obj_list_f}")
         #for obj in obj_list_f:
         #    logging.info(f" after filter: n={obj.user} c={obj.class_type}")
         self.mark_boxes_in_ref_missing_in_user(img, dset, obj_list_f)
