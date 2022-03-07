@@ -38,10 +38,11 @@ class Parser:
         self.bbl.stem2jpgs = self.get_files_with_mutiple_versions(args.data, jpg_ext, False     )
 
         self.ignore_jpg_with_no_associated_xml();
+        self.ignore_xml_with_no_associated_jpg();
 
         #self.parse_xml_dirs(stem2xmls, args.check)
         self.bbl.update_run_stats()
-        self.parse_jpg_dirs()
+        self.check_jpg_for_clash()
 
     def ignore_jpg_with_no_associated_xml(self):
 
@@ -53,22 +54,34 @@ class Parser:
                 remove_keys.append(image)
         logging.debug(f"removing keys {remove_keys=}")
         for key in remove_keys:
+            #logging.warning(" {key}: missing jpg for {self.bbl.stem2jpgs[key]}")
             self.bbl.stem2jpgs.pop(key)
 
+    def ignore_xml_with_no_associated_jpg(self):
 
+        valid_images = list(self.bbl.stem2jpgs.keys())
+
+        remove_keys = []
+        for image in self.bbl.stem2xmls.keys():
+            if not image in valid_images:
+                remove_keys.append(image)
+        logging.debug(f"removing keys {remove_keys=}")
+        for key in remove_keys:
+            logging.warning(f" missing {key}.jpg : skipping {self.bbl.stem2xmls[key]}")
+            self.bbl.stem2xmls.pop(key)
 
     def parse_xml_associated_with_image(self, image):
         """
         only parse specific 
         """
         #logging.debug(f"for {image=} s2x= {self.bbl.stem2xmls[image]}")
-        col_box = Style.BRIGHT + Fore.BLUE + Back.WHITE
+        col_box = Style.BRIGHT + Fore.RED + Back.LIGHTYELLOW_EX
+
         col_reset = Style.RESET_ALL
         for file in self.bbl.stem2xmls[image]:
-            print(f"     -> loading: {file} : found ", end='')
             bbox_list = self.parse_xml_file(image, file, self.args.check)
             self.bbl.bbox_obj_list[image].extend(bbox_list)
-            print(f" {col_box} {len(bbox_list)} {col_reset} boxes")
+            print(f" -> loaded {col_box} {len(bbox_list)} {col_reset} boxes from {file}")
 
 
     def get_files_with_mutiple_versions(self, root_dir, ext, prune):
@@ -121,7 +134,7 @@ class Parser:
                 self.bbl.bbox_obj_list.extend(bbox_list)
                 print(f" ({len(bbox_list)} boxes)")
 
-    def parse_jpg_dirs(self):
+    def check_jpg_for_clash(self):
         """
         get the object in each jpg file under jpg_path
         """

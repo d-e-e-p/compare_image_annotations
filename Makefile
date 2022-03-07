@@ -12,8 +12,9 @@ test:
 
 install:
 	pyside6-rcc -o libs/resources.py resources.qrc
+	export PYTHONUTF8=1
 	pyinstaller --clean compare_image_annotations.spec
-	echo cp -ipv dist/compare_image_annotations.exe  /g/Shared\ drives/ML/CloudFactory/TF\ CF\ Share/programs/
+	cp -ipv dist/compare_image_annotations.exe  /g/Shared\ drives/ML/CloudFactory/TF\ CF\ Share/programs/
 
 
 

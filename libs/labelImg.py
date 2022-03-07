@@ -1798,7 +1798,6 @@ table thead th {
             item.setCheckState(Qt.Checked if value else Qt.Unchecked)
 
     def load_current_image(self):
-        logging.warning(f"loading {self.image_path=}")
         self.load_image_file()
         self.update_image_overlay()
 
@@ -1813,7 +1812,7 @@ table thead th {
         #if self.image_path is None:
         #    self.image_path = self.settings.get(SETTING_FILENAME)
 
-        logging.warning(f"load {self.image_path=} {caller_name=}---------------------------")
+        logging.debug(f"load {self.image_path=} {caller_name=}---------------------------")
         #abs_image_path = os.path.abspath(image_path)
         abs_image_path = self.image_path
         if abs_image_path in self.m_img_list:
@@ -1822,7 +1821,7 @@ table thead th {
             file_widget_item.setSelected(True)
             self.file_list_widget.setCurrentItem(file_widget_item)
         else:
-            logging.warning(f"clearing...why?")
+            logging.warning(f"clearing...")
             self.file_list_widget.clear()
             self.m_img_list.clear()
 
@@ -1906,7 +1905,6 @@ table thead th {
 
 
         self.canvas.setFocus()
-        logging.warning(f"about to call draw")
         self.draw_iou_boxes()
         return True
 
@@ -2087,7 +2085,7 @@ table thead th {
         load images from key in self.pl.source_img
         """
         if not self.may_continue():
-            logging.warning(f"self.may_continue = {self.may_continue()}")
+            logging.debug(f"self.may_continue = {self.may_continue()}")
             #return
 
         self.file_list_widget.clear()
@@ -2108,6 +2106,9 @@ table thead th {
             self.file_list_widget.addItem(item)
             self.m_img_list.append(self.image_basename_to_path[imgName])
         self.img_count = len(self.m_img_list)
+        if self.img_count == 0:
+            logging.error("No images with matching xml")
+            sys.exit(-1)
 
         self.image_path = self.m_img_list[0]
         self.add_recent_file(self.image_path)

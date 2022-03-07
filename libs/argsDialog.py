@@ -25,7 +25,7 @@ class ArgsDialog(QDialog):
         main_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_title.setText("<center><h1>compare_image_annotations</h1></center>")
 
-        title = QLabel('<b>Reports Folder:<\\b>')
+        title = QLabel('<b>Reports Folder (Optional):<\\b>')
         self.rpt_foldername  = QLineEdit()
         self.rpt_file_browse = QPushButton('Browse')
         self.rpt_file_browse.clicked.connect(self.rptFolderDialog)
@@ -96,8 +96,12 @@ class ArgsDialog(QDialog):
         rpt_foldername  = self.rpt_foldername.text()
         data_foldername = self.data_foldername.text()
         args = ""
-        args += f" --out '{rpt_foldername}' "
-        args += f" --data '{data_foldername}' "
+        if rpt_foldername:
+            args += f" --out '{rpt_foldername}' "
+
+        if data_foldername:
+            args += f" --data '{data_foldername}' "
+
         for item in self.findChildren(QRadioButton):
             if item.isChecked():
                     args += f" --check {item.text()} "
@@ -138,4 +142,5 @@ class ArgsDialog(QDialog):
         button_box.accepted.connect(self.validate)
 
         return button_box
+
 

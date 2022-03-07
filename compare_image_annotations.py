@@ -14,6 +14,7 @@ import colorama
 from colorama import Fore, Back, Style
 import shlex
 from pathlib import Path
+import tempfile
 
 from PySide6.QtWidgets import (QLineEdit, QPushButton, QApplication, QVBoxLayout, QDialog)
 
@@ -53,12 +54,6 @@ def parse_args() -> argparse.Namespace:
 def validate_args(args: argparse.Namespace):
 
     valid = True
-    if not args.out:
-        valid = False
-    else:
-        if not os.path.isdir(args.out):
-            logging.debug(f' out dir {args.out} does not exist')
-            valid = False
     if not args.data:
         valid = False
     else:
@@ -86,6 +81,7 @@ def setup_logging(args):
 
 
     log_file_path = os.path.join(args.out, "debug.log")
+    print(f"saving debug log to {log_file_path}")
     Path(log_file_path).unlink(missing_ok=True)
 
     file_handler = logging.FileHandler(filename=log_file_path)
@@ -133,6 +129,11 @@ def main():
 
         args = parser.parse_args(shlex.split(argString))
 
+    # if .out is not specified, just pick tempdir
+
+    if not args.out:
+        args.out = tempfile.mkdtemp()
+
     setup_logging(args)
     logging.info(args)
 
@@ -143,19 +144,11 @@ def main():
     col = Fore.BLACK + Back.CYAN
 
     bbl = BboxList(args)
-    print(f"    0/5 {col} checking xml " + Style.RESET_ALL)
-    #bbl.check_xml_and_images();
-    #print(f"    1/5 {col} associating outer with meristem " + Style.RESET_ALL)
-    #bbl.associate_stem_with_outer()
-    #print(f"    2/5 {col} computing IOU " + Style.RESET_ALL)
-    #bbl.compute_iou_for_each_annotation()
-    #print(f"    3/5 {col} finding potential mis-labels " + Style.RESET_ALL)
-    #bbl.locate_potential_mislabel()
-    #print(f"    4/5 {col} saving report plots " + Style.RESET_ALL)
-    #pl = Plotter(bbl, args)
-    print(f"    5/5 {col} loading gui " + Style.RESET_ALL)
-
+    print(f"     {col} checking xml " + Style.RESET_ALL)
+    print(f"     {col} loading gui " + Style.RESET_ALL)
     app, _win = run_main_gui(bbl, args)
+    print(f"     {col} display xml " + Style.RESET_ALL)
+
     return app.exec()
     print(f"    done " + Style.RESET_ALL)
 
