@@ -48,29 +48,43 @@ class PlantData:
             'carrot_outer'                :	"#41faa5",
             'carrot_seedling_outer'       :	"#0bf507",
             'spinach_outer'               :	"#0bf507",      # repeat!
+            'lettuce_outer'               :	"#0bf507",      # repeat!
             'reserved_crop_outer'         : "#79b510",
             'grass_outer'                 :	"#f9d23c",
             'mallow_outer'                :	"#eaa7f7",
             'nettle_outer'                :	"#faa57d",
             'pigweed_outer'               :	"#f3e9e9",
+
             'purslane_outer'              :	"#f85f8d",
             'shepherds_purse_outer'       :	"#0ba4f0",
+            'ladysthumb_outer'            :	"#69b497",
+
+            'sowthistle_outer'            :	"#f85f8d",   # repeat from above
+            'groundsel_outer'             :	"#0ba4f0",
+            'henbit_outer'                :	"#69b497",
+
             'weed_other_outer'            :	"#f407f7",
             'unknown_outer'               :	"#f95c0a",
-            'reserved_outer'              :	"#69b497",
 
             'carrot_stem'                 :	"#030826",
             'carrot_seedling_stem'        :	"#1e0f04",
             'spinach_stem'                :	"#12094d",
+            'lettuce_stem'                :	"#12094d",
             'grass_stem'                  :	"#3c0222",
             'mallow_stem'                 :	"#0c2507",
             'nettle_stem'                 :	"#480508",
             'pigweed_stem'                :	"#0a273a",
+
             'purslane_stem'               :	"#361d2f",
             'shepherds_purse_stem'        :	"#382007",
+            'ladysthumb_stem'             :	"#05087c",
+
+            'sowthistle_stem'             :	"#361d2f",  # repeat from above
+            'groundsel_stem'              :	"#382007",
+            'henbit__stem'                :	"#05087c",
+
             'weed_other_stem'             :	"#14204d",
             'unknown_stem'                :	"#450540",
-            'reserved_stem'               :	"#05087c",
         }
     planttype_names = list(plant_colors.keys())
 
@@ -88,7 +102,7 @@ class PlantData:
 
     def has_valid_suffix(self, text):
         matches = self.type_names
-        if any('_' + x in text for x in matches):
+        if any(x in text for x in matches):
             return True
         else:
             return False
