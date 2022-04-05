@@ -23,7 +23,7 @@ import pudb
 
 sys.tracebacklimit = None
 
-
+# TODO: use SimpleNamespace instead?
 class DrawObject(object):
     def __init__(self, image, class_base, ref_user, visible_types, active_users, visible_users, iou_filter_value,
             color_theme, adjust_background, adjust_foreground):
@@ -53,9 +53,12 @@ class DrawObject(object):
 
         return True
 
+    def __repr__(self):
+        items = (f"{k}={v!r}" for k, v in self.__dict__.items())
+        return "{}({})".format(type(self).__name__, ", ".join(items))
 
     def __str__(self):
-        return f"i={self.image} c={self.class_base} ru={self.ref_user} vt={self.visible_types} vu={self.visible_users} cs={self.color_theme} ab={self.adjust_background} af={self.adjust_foreground}"
+        return f"i={self.image} c={self.class_base} ru={self.ref_user} vt={self.visible_types} vu={self.visible_users} cs={self.color_theme} fv={self.iou_filter_value} ab={self.adjust_background} af={self.adjust_foreground}"
 
 class Plotter:
     def __init__(self, bbl, args):
