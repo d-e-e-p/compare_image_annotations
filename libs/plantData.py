@@ -81,7 +81,7 @@ class PlantData:
 
             'sowthistle_stem'             :	"#361d2f",  # repeat from above
             'groundsel_stem'              :	"#382007",
-            'henbit__stem'                :	"#05087c",
+            'henbit_stem'                :	"#05087c",
 
             'weed_other_stem'             :	"#14204d",
             'unknown_stem'                :	"#450540",
